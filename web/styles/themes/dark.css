@@ -1,5 +1,4 @@
 :root {
-  color-scheme: dark;
   --h3ps-bg: #09090a;
   --h3ps-surface: #0e0e10;
   --h3ps-surface-2: #121215;
@@ -19,3 +18,5 @@
   --h3ps-danger: #ed806d;
   --h3ps-shadow: 0 30px 100px rgba(0, 0, 0, .72), 0 4px 18px rgba(0, 0, 0, .46);
 }
+
+.h3ps-root { color-scheme: dark; }

@@ -532,7 +532,7 @@ function toggleReferenceInsert() {
   }
   const tags = referenceTagsForCurrentDraft();
   if (!tags.length) return;
-  popover.innerHTML = tags.map((reference) => `<button type="button" class="h3ps-reference-chip is-${referenceTagKind(reference)}" data-insert-reference="${escapeHtml(reference)}" role="menuitem">${escapeHtml(reference)}</button>`).join("");
+  popover.innerHTML = tags.map((reference) => `<button type="button" class="h3ps-reference-chip is-${referenceTagKind(reference)}" data-insert-reference="${escapeHtml(reference)}">${escapeHtml(reference)}</button>`).join("");
   popover.hidden = false;
   toggle.setAttribute("aria-expanded", "true");
 }
@@ -1890,9 +1890,11 @@ function renderApiProviderControl() {
 function setOtherModelsPopover(open) {
   if (!studio) return;
   const popover = studio.root.querySelector("[data-other-models-popover]");
+  const backdrop = studio.root.querySelector("[data-other-models-backdrop]");
   const trigger = studio.root.querySelector("[data-other-models-toggle]");
   if (!popover) return;
   popover.hidden = !open;
+  if (backdrop) backdrop.hidden = !open;
   trigger?.setAttribute("aria-expanded", String(open));
   if (open) {
     requestAnimationFrame(() => {
@@ -2240,13 +2242,30 @@ function syncAdvancedRuntimeControls() {
   menu.querySelectorAll('[data-runtime-option="reasoning"]').forEach((button) => button.addEventListener("click", (event) => applyRuntimeOption(button, event)));
 }
 
+function setRuntimeMenuOpen(name, open, restoreFocus = false) {
+  if (!studio) return;
+  const menu = studio.root.querySelector(`[data-runtime-menu="${name}"]`);
+  const toggle = studio.root.querySelector(`[data-runtime-toggle="${name}"]`);
+  if (!menu) return;
+  menu.hidden = !open;
+  toggle?.setAttribute("aria-expanded", String(open));
+  if (!open && restoreFocus) toggle?.focus({ preventScroll: true });
+}
+
+function closeRuntimeMenus(exceptName = null) {
+  if (!studio) return;
+  studio.root.querySelectorAll("[data-runtime-menu]").forEach((menu) => {
+    if (menu.dataset.runtimeMenu !== exceptName) setRuntimeMenuOpen(menu.dataset.runtimeMenu, false);
+  });
+}
+
 function applyRuntimeOption(button, event) {
   event.preventDefault();
   if (button.dataset.runtimeOption === "context") studio.contextProfile = button.dataset.value;
   else if (button.dataset.runtimeOption === "kv") studio.kvCache = button.dataset.value;
   else if (button.dataset.runtimeOption === "budget") studio.generationBudget = button.dataset.value;
   else studio.reasoningEffort = button.dataset.value;
-  button.closest("[data-runtime-menu]").hidden = true;
+  setRuntimeMenuOpen(button.dataset.runtimeOption, false, true);
   syncRuntimeSummary();
   syncThinkingAvailability();
   rememberRuntimePreferences();
@@ -2847,8 +2866,8 @@ function createStudio() {
         </nav>
         <div class="h3ps-header-meta">
           <div class="h3ps-guide-picker">
-            <button class="h3ps-guide-button" type="button" aria-haspopup="menu" aria-expanded="false" data-guide-toggle>Official guides ${icon("chevron", 13)}</button>
-            <div class="h3ps-guide-menu" role="menu" data-guide-menu hidden><span>Loading guides…</span></div>
+            <button class="h3ps-guide-button" type="button" aria-expanded="false" data-guide-toggle>Official guides ${icon("chevron", 13)}</button>
+            <div class="h3ps-guide-menu" data-guide-menu hidden><span>Loading guides…</span></div>
           </div>
           <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
           <button class="h3ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
@@ -2875,10 +2894,10 @@ function createStudio() {
             <span><small>Media</small><strong data-h3ps-mode-title></strong></span>
             <div class="h3ps-clear-control" data-clear-control>
               <button class="h3ps-clear-primary" type="button" data-clear-media>Clear</button>
-              <button class="h3ps-clear-toggle" type="button" aria-label="More clear options" aria-haspopup="menu" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
-              <div class="h3ps-clear-menu" role="menu" data-clear-menu hidden>
-                <button type="button" role="menuitem" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
-                <button class="is-destructive" type="button" role="menuitem" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
+              <button class="h3ps-clear-toggle" type="button" aria-label="More clear options" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
+              <div class="h3ps-clear-menu" data-clear-menu hidden>
+                <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
+                <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
               </div>
             </div>
           </div>
@@ -2887,7 +2906,7 @@ function createStudio() {
 
           <div class="h3ps-control-grid">
             <label class="h3ps-field h3ps-duration-field"><span>Duration <b data-duration-label>10 seconds</b></span><div><input type="range" min="1" max="20" step="1" value="10" style="--h3ps-range:47.37%" data-duration-slider><i></i></div></label>
-            <label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" aria-haspopup="listbox" aria-expanded="false" data-choice-toggle="aspect"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" role="listbox" aria-label="Aspect ratio" data-choice-menu="aspect" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" role="option" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>
+            <label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" aria-expanded="false" data-choice-toggle="aspect"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" role="group" aria-label="Aspect ratio" data-choice-menu="aspect" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" aria-pressed="false" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>
           </div>
 
           <label class="h3ps-brief">
@@ -2974,8 +2993,8 @@ function createStudio() {
             <span class="h3ps-output-primary-actions">
               <button class="h3ps-secondary-button" type="button" title="Refine with local LLM" data-refine-toggle>${icon("spark", 15)} Refine</button>
               <span class="h3ps-reference-insert" data-reference-insert hidden>
-                <button class="h3ps-reference-insert-toggle" type="button" title="Insert reference" aria-label="Insert reference" aria-haspopup="menu" aria-expanded="false" data-reference-insert-toggle></button>
-                <span class="h3ps-reference-insert-popover" data-reference-insert-popover role="menu" hidden></span>
+                <button class="h3ps-reference-insert-toggle" type="button" title="Insert reference" aria-label="Insert reference" aria-expanded="false" data-reference-insert-toggle></button>
+                <span class="h3ps-reference-insert-popover" data-reference-insert-popover hidden></span>
               </span>
             </span>
             <button class="h3ps-secondary-button" type="button" data-copy>${icon("copy", 15)} <span data-copy-label>Copy prompt</span></button>
@@ -3000,7 +3019,8 @@ function createStudio() {
       </footer>
     </section>
 
-    <section class="h3ps-other-models-popover" role="dialog" aria-label="Other verified models" data-other-models-popover hidden>
+    <div class="h3ps-other-models-backdrop" aria-hidden="true" data-other-models-backdrop hidden></div>
+    <section class="h3ps-other-models-popover" role="dialog" aria-modal="true" aria-label="Other verified models" data-other-models-popover hidden>
       <header><span><strong>Other verified models</strong><small>Recommended GGUF and projector pairs</small></span><button class="h3ps-icon-button" type="button" aria-label="Close verified models" data-other-models-close>${icon("close", 16)}</button></header>
       <div class="h3ps-other-models-catalog" data-other-models-catalog></div>
     </section>
@@ -3037,7 +3057,7 @@ function createStudio() {
   root.querySelector("[data-aspect-label]").textContent = restoredAspect[0];
   root.querySelector("[data-aspect-description]").textContent = restoredAspect[1];
   root.querySelectorAll("[data-aspect]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.aspect === restoredAspect[0]));
+    button.setAttribute("aria-pressed", String(button.dataset.aspect === restoredAspect[0]));
   });
   syncFullscreenState();
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
@@ -3046,9 +3066,7 @@ function createStudio() {
     if (studio.draftDefaultsArmed && !event.target.closest("[data-restore-default-drafts]")) disarmDraftDefaults();
     if (studio.toastDismissOnWorkspaceClick && !event.target.closest("[data-h3ps-toast]")) hideToast();
     if (!event.target.closest("[data-other-models-toggle], [data-other-models-popover]")) setOtherModelsPopover(false);
-    if (!isRuntimeMenuInteraction(event.target)) {
-      root.querySelectorAll("[data-runtime-menu]").forEach((menu) => { menu.hidden = true; });
-    }
+    if (!isRuntimeMenuInteraction(event.target)) closeRuntimeMenus();
     if (!isChoiceMenuInteraction(event.target)) {
       root.querySelectorAll("[data-choice-menu]").forEach((menu) => { menu.hidden = true; });
       root.querySelectorAll("[data-choice-toggle]").forEach((button) => button.setAttribute("aria-expanded", "false"));
@@ -3145,9 +3163,11 @@ function createStudio() {
   });
   root.querySelectorAll("[data-runtime-toggle]").forEach((button) => button.addEventListener("click", (event) => {
     event.preventDefault();
-    const menu = root.querySelector(`[data-runtime-menu="${button.dataset.runtimeToggle}"]`);
-    root.querySelectorAll("[data-runtime-menu]").forEach((item) => { if (item !== menu) item.hidden = true; });
-    menu.hidden = !menu.hidden;
+    const name = button.dataset.runtimeToggle;
+    const menu = root.querySelector(`[data-runtime-menu="${name}"]`);
+    const open = menu.hidden;
+    closeRuntimeMenus();
+    setRuntimeMenuOpen(name, open);
   }));
   root.querySelectorAll("[data-runtime-option]").forEach((button) => button.addEventListener("click", (event) => applyRuntimeOption(button, event)));
   root.querySelector("[data-custom-context-input]").addEventListener("input", (event) => {
@@ -3241,7 +3261,7 @@ function createStudio() {
     root.querySelector("[data-aspect-description]").textContent = option[1];
     root.querySelector('[data-choice-menu="aspect"]').hidden = true;
     root.querySelector('[data-choice-toggle="aspect"]').setAttribute("aria-expanded", "false");
-    root.querySelectorAll("[data-aspect]").forEach((item) => item.setAttribute("aria-selected", String(item === button)));
+    root.querySelectorAll("[data-aspect]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
     saveUserPreferences(localStorage, studio);
   }));
   root.querySelectorAll("[data-provider-option]").forEach((button) => button.addEventListener("click", () => {
@@ -3538,7 +3558,7 @@ function openStudio() {
   requestAnimationFrame(() => {
     updateBriefLayout();
     modal.tabIndex = -1;
-    modal.focus({ preventScroll: true });
+    (modal.querySelector("[data-close-studio]") || modal).focus({ preventScroll: true });
   });
 }
 
@@ -3673,6 +3693,7 @@ document.addEventListener("keydown", (event) => {
     }
     const guideMenu = studio.root.querySelector("[data-guide-menu]");
     const choiceMenu = Array.from(studio.root.querySelectorAll("[data-choice-menu]")).find((menu) => !menu.hidden);
+    const runtimeMenu = Array.from(studio.root.querySelectorAll("[data-runtime-menu]")).find((menu) => !menu.hidden);
     const referenceMenu = studio.root.querySelector("[data-reference-insert-popover]");
     if (!guideMenu.hidden) {
       guideMenu.hidden = true;
@@ -3684,11 +3705,12 @@ document.addEventListener("keydown", (event) => {
       const toggle = studio.root.querySelector(`[data-choice-toggle="${choiceMenu.dataset.choiceMenu}"]`);
       toggle?.setAttribute("aria-expanded", "false");
       toggle?.focus();
-    } else if (!referenceMenu.hidden) closeReferenceInsert();
-    else if (studio.fullscreen) setFullscreen(false);
+    } else if (runtimeMenu) setRuntimeMenuOpen(runtimeMenu.dataset.runtimeMenu, false, true);
+    else if (!referenceMenu.hidden) closeReferenceInsert();
     else if (!studio.root.querySelector("[data-other-models-popover]").hidden) setOtherModelsPopover(false);
     else if (studio.root.querySelector("[data-h3ps-image-preview]").classList.contains("is-open")) closeImagePreview();
     else if (studio.root.querySelector("[data-h3ps-preview]").classList.contains("is-open")) closeVideoPreview();
+    else if (studio.fullscreen) setFullscreen(false);
     else closeStudio();
   }
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {

@@ -1363,9 +1363,31 @@ test("closed Prompt Writer does not advertise an active modal", () => {
 test("workbench exposes responsive stacking and layered keyboard navigation", () => {
   assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
   assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(mainSource, /aria-haspopup="menu" aria-expanded="false" data-guide-toggle/);
+  assert.match(mainSource, /aria-expanded="false" data-guide-toggle/);
+  assert.doesNotMatch(mainSource, /role="(?:menu|menuitem|listbox|option)"|aria-haspopup="menu"/);
+  assert.match(mainSource, /class="h3ps-choice-menu h3ps-aspect-menu"[^>]*role="group"/);
+  assert.match(mainSource, /aria-pressed="false"\s+data-aspect="\$\{value\}"/);
   assert.match(mainSource, /role="status" aria-live="polite" aria-atomic="true" data-status/);
   assert.match(mainSource, /if \(event\.key === "Tab"\)[\s\S]{0,1000}focusable/);
+});
+
+test("runtime pickers and the verified-model dialog keep keyboard state in sync", () => {
+  assert.match(settingsSource, /aria-haspopup="true" aria-expanded="false" data-runtime-toggle="context"/);
+  assert.match(settingsSource, /aria-haspopup="true" aria-expanded="false" data-runtime-toggle="reasoning"/);
+  assert.match(mainSource, /function setRuntimeMenuOpen\(name, open, restoreFocus = false\)/);
+  assert.match(mainSource, /else if \(runtimeMenu\) setRuntimeMenuOpen\(runtimeMenu\.dataset\.runtimeMenu, false, true\)/);
+  assert.match(mainSource, /data-other-models-backdrop[^>]*hidden/);
+  assert.match(mainSource, /role="dialog" aria-modal="true" aria-label="Other verified models"/);
+  assert.match(styleSources.overlays, /\.h3ps-other-models-backdrop\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*119;/);
+  assert.doesNotMatch(styleSources.overlays, /100vmax/);
+});
+
+test("focus styling stays visible for controls without outlining the dialog shell", () => {
+  assert.match(styleSources.foundation, /\.h3ps-root \.h3ps-modal:focus,[\s\S]{0,80}\.h3ps-root \.h3ps-modal:focus-visible\s*\{\s*outline:\s*none !important;/);
+  assert.match(styleSources.foundation, /\.h3ps-floating-launcher:focus-visible\s*\{[^}]*outline:\s*2px solid rgba\(232, 97, 60, \.72\) !important/);
+  assert.doesNotMatch(styleSources.settings, /\.h3ps-provider-selector > button:focus-visible\s*\{[^}]*outline:\s*0/);
+  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{\s*color-scheme:\s*dark;/);
+  assert.doesNotMatch(styleSources["themes/dark"], /:root\s*\{[^}]*color-scheme:/);
 });
 
 test("fullscreen reuses the studio root and persists its UI state", () => {
@@ -1375,7 +1397,7 @@ test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /if \(studio\.fullscreen\) setFullscreen\(false\)/);
   assert.match(mainSource, /saveUserPreferences\(localStorage, studio\)/);
   assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,420}requestAnimationFrame\(\(\) => \{[\s\S]{0,120}updateBriefLayout\(\)/);
-  assert.match(mainSource, /modal\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
   assert.match(stylesSource, /\.h3ps-root\.is-fullscreen \.h3ps-brief textarea \{ max-height: none; \}/);

@@ -1,4 +1,4 @@
-/* Settings shell */
+/* Settings base */
 .h3ps-settings-view { grid-row:2 / -1; min-height:0; overflow:auto; background:var(--h3ps-surface); scrollbar-width:thin; scrollbar-color:#484d56 transparent; }
 .h3ps-settings-heading { position:sticky; z-index:12; top:0; display:flex; align-items:center; justify-content:space-between; min-height:68px; padding:11px 22px; border-bottom:1px solid var(--h3ps-border); background:#17191e; }
 .h3ps-settings-heading > span { display:flex; flex-direction:column; }
@@ -69,7 +69,7 @@
 .h3ps-settings-view .h3ps-runtime-settings > div { padding:0; }
 .h3ps-settings-view .h3ps-runtime-settings > p { margin:9px 1px 0; color:var(--h3ps-dim); font-size:9px; line-height:1.4; }
 
-/* Settings shell */
+/* Settings layout */
 .h3ps-settings-view { background: var(--h3ps-bg); scrollbar-color: #242428 transparent; }
 .h3ps-settings-heading {
   min-height: 76px;
@@ -103,7 +103,7 @@
 .h3ps-settings-view .h3ps-runtime-settings { grid-area: runtime; }
 .h3ps-system-prompt-card { grid-area: prompt; }
 
-/* Settings sections are intentionally flat; only fields are boxed. */
+/* Settings sections */
 .h3ps-settings-card,
 .h3ps-settings-view .h3ps-runtime-settings {
   min-width: 0;
@@ -156,10 +156,6 @@
 .h3ps-provider-selector > button.is-selected {
   border-color: transparent;
   background: #141416;
-  box-shadow: none;
-}
-.h3ps-provider-selector > button:focus-visible {
-  outline: 0;
   box-shadow: none;
 }
 .h3ps-provider-selector > button.is-selected::before {
