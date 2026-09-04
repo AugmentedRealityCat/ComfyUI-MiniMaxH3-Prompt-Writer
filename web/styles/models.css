@@ -182,6 +182,18 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
 }
+.h3ps-direct-model-empty {
+  margin-top: 12px;
+  padding: 12px;
+  border-color: var(--h3ps-border-soft);
+  background: var(--h3ps-surface-2);
+}
+.h3ps-direct-model-empty .h3ps-model-path {
+  border-color: var(--h3ps-border);
+  background: var(--h3ps-bg);
+  color: var(--h3ps-text-secondary);
+}
+.h3ps-direct-model-empty .h3ps-model-path:hover { border-color: #3a3a41; }
 .h3ps-model-lifecycle {
   border-color: var(--h3ps-border);
   border-radius: 20px;

@@ -74,8 +74,8 @@ const styleModules = [
   "shell",
   "workbench",
   "media",
-  "models",
   "settings",
+  "models",
   "providers",
   "prompts",
   "overlays",
@@ -87,7 +87,7 @@ const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async
   await readFile(new URL(`../web/styles/${name}.css`, import.meta.url), "utf8"),
 ])));
 const stylesSource = styleModules.map((name) => styleSources[name]).join("\n");
-const skinSource = ["tokens", "themes/dark", "shell", "workbench", "media", "models", "settings", "providers", "prompts", "overlays", "music", "responsive"]
+const skinSource = ["tokens", "themes/dark", "shell", "workbench", "media", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
   .map((name) => styleSources[name])
   .join("\n");
 
@@ -103,6 +103,7 @@ function memoryStorage(initial = {}) {
 
 test("frontend styles load as ordered modules with one isolated theme", () => {
   assert.match(mainSource, /const STYLE_MODULES = \[[\s\S]+"tokens"[\s\S]+"themes\/dark"[\s\S]+"responsive"/);
+  assert.ok(mainSource.indexOf('"settings"') < mainSource.indexOf('"models"'));
   assert.match(mainSource, /\.\/styles\/\$\{name\}\.css/);
   assert.doesNotMatch(mainSource, /\.\/skin\.css|\.\/styles\.css/);
   assert.match(styleSources["themes/dark"], /--h3ps-bg:/);
