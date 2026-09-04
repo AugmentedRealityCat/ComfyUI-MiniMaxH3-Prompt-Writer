@@ -174,6 +174,7 @@ N/A`;
 let studio;
 let ggufRuntimeDiagnosticsPromise = null;
 let referenceInsertTarget = null;
+let studioReturnFocus = null;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({
@@ -335,20 +336,30 @@ function syncModifiedState() {
   studio.root.querySelector("[data-undo-edits]").hidden = !modified || !hasBaseline;
 }
 
+const STYLE_MODULES = [
+  "tokens",
+  "themes/dark",
+  "foundation",
+  "shell",
+  "workbench",
+  "media",
+  "models",
+  "settings",
+  "providers",
+  "prompts",
+  "overlays",
+  "music",
+  "responsive",
+];
+
 function injectStyles() {
-  if (!document.querySelector("link[data-h3ps-styles]")) {
+  for (const name of STYLE_MODULES) {
+    if (document.querySelector(`link[data-h3ps-style="${name}"]`)) continue;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = new URL("./styles.css", import.meta.url).href;
-    link.dataset.h3psStyles = "true";
+    link.href = new URL(`./styles/${name}.css`, import.meta.url).href;
+    link.dataset.h3psStyle = name;
     document.head.appendChild(link);
-  }
-  if (!document.querySelector("link[data-h3ps-skin]")) {
-    const skin = document.createElement("link");
-    skin.rel = "stylesheet";
-    skin.href = new URL("./skin.css", import.meta.url).href;
-    skin.dataset.h3psSkin = "true";
-    document.head.appendChild(skin);
   }
 }
 
@@ -992,7 +1003,10 @@ function syncWorkspace() {
   studio.root.querySelector("[data-video-modes]").hidden = music;
   studio.root.querySelector("[data-video-inputs]").hidden = music;
   studio.root.querySelector("[data-music-inputs]").hidden = !music;
-  studio.root.querySelector("[data-output-label]").textContent = music ? "Generated caption" : "Generated prompt";
+  const outputLabel = music ? "Generated caption" : "Generated prompt";
+  studio.root.querySelector("[data-output-label]").textContent = outputLabel;
+  studio.root.querySelector("[data-output-mobile-label]").textContent = outputLabel;
+  studio.root.querySelector("[data-output]").setAttribute("aria-label", outputLabel);
   studio.root.querySelector("[data-copy-label]").textContent = music ? "Copy caption" : "Copy prompt";
   studio.root.querySelector("[data-generate-label]").textContent = music ? "Generate caption" : "Generate prompt";
   studio.root.querySelector("[data-refine-media-note]").textContent = music ? "Lyrics stay separate" : "No media re-upload";
@@ -1880,28 +1894,13 @@ function setOtherModelsPopover(open) {
   if (!popover) return;
   popover.hidden = !open;
   trigger?.setAttribute("aria-expanded", String(open));
-  if (open) requestAnimationFrame(positionOtherModelsPopover);
-}
-
-function positionOtherModelsPopover() {
-  const popover = studio?.root.querySelector("[data-other-models-popover]");
-  const trigger = studio?.root.querySelector("[data-other-models-toggle]");
-  const panel = studio?.root.querySelector('[data-provider-panel="direct"]');
-  if (!popover || popover.hidden || !trigger || !panel) return;
-  const margin = 12;
-  const gap = 8;
-  const panelRect = panel.getBoundingClientRect();
-  const triggerRect = trigger.getBoundingClientRect();
-  const width = Math.min(panelRect.width, 560, window.innerWidth - margin * 2);
-  popover.style.width = `${width}px`;
-  const maxHeight = Math.min(window.innerHeight * 0.62, 520, window.innerHeight - margin * 2);
-  const height = Math.min(popover.scrollHeight, maxHeight);
-  let left = triggerRect.right + gap;
-  if (left + width > window.innerWidth - margin) left = triggerRect.left - width - gap;
-  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-  const top = Math.max(margin, Math.min(triggerRect.top, window.innerHeight - height - margin));
-  popover.style.left = `${left}px`;
-  popover.style.top = `${top}px`;
+  if (open) {
+    requestAnimationFrame(() => {
+      popover.querySelector("[data-other-models-close]")?.focus();
+    });
+  } else if (popover.contains(document.activeElement)) {
+    trigger?.focus();
+  }
 }
 
 function localModels() {
@@ -2848,8 +2847,8 @@ function createStudio() {
         </nav>
         <div class="h3ps-header-meta">
           <div class="h3ps-guide-picker">
-            <button class="h3ps-guide-button" type="button" data-guide-toggle>Official guides ${icon("chevron", 13)}</button>
-            <div class="h3ps-guide-menu" data-guide-menu hidden><span>Loading guides…</span></div>
+            <button class="h3ps-guide-button" type="button" aria-haspopup="menu" aria-expanded="false" data-guide-toggle>Official guides ${icon("chevron", 13)}</button>
+            <div class="h3ps-guide-menu" role="menu" data-guide-menu hidden><span>Loading guides…</span></div>
           </div>
           <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
           <button class="h3ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
@@ -2860,7 +2859,7 @@ function createStudio() {
       ${settingsMarkup(icon)}
 
       <div class="h3ps-workspace-toolbar" data-generate-view>
-        <nav class="h3ps-modes" aria-label="Generation mode" data-video-modes>
+        <nav class="h3ps-modes" role="tablist" aria-label="Generation mode" data-video-modes>
           ${Object.keys(MODES).map((mode) => `<button type="button" role="tab" data-mode="${mode}">${mode}</button>`).join("")}
         </nav>
         <div class="h3ps-output-toolbar">
@@ -2888,7 +2887,7 @@ function createStudio() {
 
           <div class="h3ps-control-grid">
             <label class="h3ps-field h3ps-duration-field"><span>Duration <b data-duration-label>10 seconds</b></span><div><input type="range" min="1" max="20" step="1" value="10" style="--h3ps-range:47.37%" data-duration-slider><i></i></div></label>
-            <label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" data-choice-toggle="aspect"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" data-choice-menu="aspect" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>
+            <label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" aria-haspopup="listbox" aria-expanded="false" data-choice-toggle="aspect"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" role="listbox" aria-label="Aspect ratio" data-choice-menu="aspect" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" role="option" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>
           </div>
 
           <label class="h3ps-brief">
@@ -2952,10 +2951,11 @@ function createStudio() {
           ${generateModelSummaryMarkup(icon)}
         </section>
 
-        <section class="h3ps-output-panel">
+        <section class="h3ps-output-panel" aria-label="Generated result">
+          <div class="h3ps-output-mobile-toolbar" aria-hidden="true"><span data-output-mobile-label>Generated prompt</span></div>
           <div class="h3ps-editor-wrap">
             <div class="h3ps-editor-highlight" data-prompt-highlights aria-hidden="true"></div>
-            <textarea class="h3ps-editor" spellcheck="false" data-output>${SAMPLE_PROMPT}</textarea>
+            <textarea class="h3ps-editor" aria-label="Generated prompt" spellcheck="false" data-output>${SAMPLE_PROMPT}</textarea>
             <div class="h3ps-reference-peek" data-reference-peek hidden></div>
             <div class="h3ps-editor-meta"><span>${promptLengthMeta(SAMPLE_PROMPT)}</span></div>
           </div>
@@ -2988,7 +2988,7 @@ function createStudio() {
           <button class="h3ps-memory-action" type="button" data-comfy-memory-action title="Unload models held by ComfyUI without clearing cached workflow results">${icon("memory", 15)}Free ComfyUI VRAM</button>
           <span class="h3ps-prompt-lifecycle-actions" data-prompt-lifecycle-actions></span>
         </div>
-        <div class="h3ps-status is-busy" data-status hidden><span><strong></strong><small data-status-detail></small></span></div>
+        <div class="h3ps-status is-busy" role="status" aria-live="polite" aria-atomic="true" data-status hidden><span><strong></strong><small data-status-detail></small></span></div>
         <div class="h3ps-footer-actions">
           <span class="h3ps-generation-options">
             <label class="h3ps-toggle-control"><input type="checkbox" data-thinking><span></span>Thinking</label>
@@ -3000,8 +3000,8 @@ function createStudio() {
       </footer>
     </section>
 
-    <section class="h3ps-other-models-popover" data-other-models-popover hidden>
-      <header><span><strong>Other verified models</strong><small>Recommended GGUF and projector pairs</small></span><button class="h3ps-icon-button" type="button" data-other-models-close>${icon("close", 16)}</button></header>
+    <section class="h3ps-other-models-popover" role="dialog" aria-label="Other verified models" data-other-models-popover hidden>
+      <header><span><strong>Other verified models</strong><small>Recommended GGUF and projector pairs</small></span><button class="h3ps-icon-button" type="button" aria-label="Close verified models" data-other-models-close>${icon("close", 16)}</button></header>
       <div class="h3ps-other-models-catalog" data-other-models-catalog></div>
     </section>
 
@@ -3024,7 +3024,7 @@ function createStudio() {
       </div>
     </section>
 
-    <div class="h3ps-toast" data-h3ps-toast><span class="h3ps-toast-icon">${icon("info", 17)}</span><span><strong data-toast-title>Notice</strong><span data-toast-message></span><button type="button" class="h3ps-toast-action" data-toast-action hidden></button><details data-toast-details hidden><summary>Technical details</summary><pre></pre></details></span></div>`;
+    <div class="h3ps-toast" role="status" aria-live="polite" aria-atomic="true" data-h3ps-toast><span class="h3ps-toast-icon">${icon("info", 17)}</span><span><strong data-toast-title>Notice</strong><span data-toast-message></span><button type="button" class="h3ps-toast-action" data-toast-action hidden></button><details data-toast-details hidden><summary>Technical details</summary><pre></pre></details></span></div>`;
   document.body.appendChild(root);
 
   studio = { root, ...createStudioState({ sessionId: createSessionId(), storage: localStorage }) };
@@ -3036,6 +3036,9 @@ function createStudio() {
   const restoredAspect = ASPECT_RATIOS.find(([value]) => value === studio.aspectRatio) || ASPECT_RATIOS.find(([value]) => value === "16:9");
   root.querySelector("[data-aspect-label]").textContent = restoredAspect[0];
   root.querySelector("[data-aspect-description]").textContent = restoredAspect[1];
+  root.querySelectorAll("[data-aspect]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.aspect === restoredAspect[0]));
+  });
   syncFullscreenState();
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
   root.querySelector("[data-fullscreen-toggle]").addEventListener("click", () => setFullscreen(!studio.fullscreen));
@@ -3048,9 +3051,11 @@ function createStudio() {
     }
     if (!isChoiceMenuInteraction(event.target)) {
       root.querySelectorAll("[data-choice-menu]").forEach((menu) => { menu.hidden = true; });
+      root.querySelectorAll("[data-choice-toggle]").forEach((button) => button.setAttribute("aria-expanded", "false"));
     }
     if (!isGuideMenuInteraction(event.target)) {
       root.querySelectorAll("[data-guide-menu]").forEach((menu) => { menu.hidden = true; });
+      root.querySelector("[data-guide-toggle]")?.setAttribute("aria-expanded", "false");
     }
     if (!event.target.closest("[data-model-files-toggle], [data-model-files-menu]")) {
       root.querySelectorAll("[data-model-files-menu]").forEach((menu) => { menu.hidden = true; });
@@ -3110,6 +3115,7 @@ function createStudio() {
   root.querySelector("[data-guide-toggle]").addEventListener("click", async () => {
     const menu = root.querySelector("[data-guide-menu]");
     menu.hidden = !menu.hidden;
+    root.querySelector("[data-guide-toggle]").setAttribute("aria-expanded", String(!menu.hidden));
     if (menu.hidden) return;
     if (studio.mode === "Music3") {
       menu.innerHTML = `<a href="${MUSIC3_GUIDE_URL}" target="_blank" rel="noopener noreferrer"><strong>Music Caption Rewriter</strong><small>Official MiniMax Music 3 guide</small></a>`;
@@ -3129,6 +3135,7 @@ function createStudio() {
     const menu = root.querySelector(`[data-choice-menu="${button.dataset.choiceToggle}"]`);
     root.querySelectorAll("[data-choice-menu]").forEach((item) => { if (item !== menu) item.hidden = true; });
     menu.hidden = !menu.hidden;
+    button.setAttribute("aria-expanded", String(!menu.hidden));
   }));
   root.querySelector("[data-duration-slider]").addEventListener("input", (event) => {
     studio.durationSeconds = Number(event.target.value);
@@ -3233,6 +3240,8 @@ function createStudio() {
     root.querySelector("[data-aspect-label]").textContent = option[0];
     root.querySelector("[data-aspect-description]").textContent = option[1];
     root.querySelector('[data-choice-menu="aspect"]').hidden = true;
+    root.querySelector('[data-choice-toggle="aspect"]').setAttribute("aria-expanded", "false");
+    root.querySelectorAll("[data-aspect]").forEach((item) => item.setAttribute("aria-selected", String(item === button)));
     saveUserPreferences(localStorage, studio);
   }));
   root.querySelectorAll("[data-provider-option]").forEach((button) => button.addEventListener("click", () => {
@@ -3365,7 +3374,6 @@ function createStudio() {
   root.querySelector("[data-settings-view]").addEventListener("scroll", () => setOtherModelsPopover(false));
   window.addEventListener("resize", () => {
     updateBriefCount();
-    if (!root.querySelector("[data-other-models-popover]").hidden) positionOtherModelsPopover();
   });
   root.querySelector("[data-refine-toggle]").addEventListener("click", () => toggleRefine(root.querySelector("[data-refine-panel]").hidden));
   root.querySelector("[data-refine-cancel]").addEventListener("click", () => toggleRefine(false));
@@ -3519,6 +3527,7 @@ function createStudio() {
 function openStudio() {
   const current = createStudio();
   const modal = current.root.querySelector(".h3ps-modal");
+  studioReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   setMusicSystemPromptExpanded(false);
   syncMusicSystemPromptSummary();
   modal.hidden = false;
@@ -3526,7 +3535,11 @@ function openStudio() {
   current.root.classList.add("is-open");
   current.root.setAttribute("aria-hidden", "false");
   document.body.classList.add("h3ps-modal-open");
-  requestAnimationFrame(updateBriefLayout);
+  requestAnimationFrame(() => {
+    updateBriefLayout();
+    modal.tabIndex = -1;
+    modal.focus({ preventScroll: true });
+  });
 }
 
 function closeStudio() {
@@ -3541,6 +3554,8 @@ function closeStudio() {
   studio.root.classList.remove("is-open");
   studio.root.setAttribute("aria-hidden", "true");
   document.body.classList.remove("h3ps-modal-open");
+  studioReturnFocus?.focus?.({ preventScroll: true });
+  studioReturnFocus = null;
 }
 
 function installLauncher() {
@@ -3633,13 +3648,44 @@ function installLauncher() {
 
 document.addEventListener("keydown", (event) => {
   if (!studio?.root.classList.contains("is-open")) return;
+  if (event.key === "Tab") {
+    const openPopover = studio.root.querySelector("[data-other-models-popover]:not([hidden])");
+    const focusScope = openPopover || studio.root.querySelector(".h3ps-modal");
+    const focusable = Array.from(focusScope.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
+      .filter((element) => element.getClientRects().length && !element.closest("[hidden]"));
+    if (focusable.length) {
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  }
   if (event.key === "Escape") {
     event.preventDefault();
     if (!studio.root.querySelector("[data-clear-menu]").hidden) {
       setClearMenuOpen(false);
       return;
     }
-    if (studio.fullscreen) setFullscreen(false);
+    const guideMenu = studio.root.querySelector("[data-guide-menu]");
+    const choiceMenu = Array.from(studio.root.querySelectorAll("[data-choice-menu]")).find((menu) => !menu.hidden);
+    const referenceMenu = studio.root.querySelector("[data-reference-insert-popover]");
+    if (!guideMenu.hidden) {
+      guideMenu.hidden = true;
+      const toggle = studio.root.querySelector("[data-guide-toggle]");
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.focus();
+    } else if (choiceMenu) {
+      choiceMenu.hidden = true;
+      const toggle = studio.root.querySelector(`[data-choice-toggle="${choiceMenu.dataset.choiceMenu}"]`);
+      toggle?.setAttribute("aria-expanded", "false");
+      toggle?.focus();
+    } else if (!referenceMenu.hidden) closeReferenceInsert();
+    else if (studio.fullscreen) setFullscreen(false);
     else if (!studio.root.querySelector("[data-other-models-popover]").hidden) setOtherModelsPopover(false);
     else if (studio.root.querySelector("[data-h3ps-image-preview]").classList.contains("is-open")) closeImagePreview();
     else if (studio.root.querySelector("[data-h3ps-preview]").classList.contains("is-open")) closeVideoPreview();

@@ -67,8 +67,29 @@ const settingsSource = await readFile(new URL("../web/settings.js", import.meta.
 const settingsEncoded = Buffer.from(settingsSource).toString("base64");
 const { settingsMarkup } = await import(`data:text/javascript;base64,${settingsEncoded}`);
 const mainSource = await readFile(new URL("../web/main.js", import.meta.url), "utf8");
-const skinSource = await readFile(new URL("../web/skin.css", import.meta.url), "utf8");
-const stylesSource = await readFile(new URL("../web/styles.css", import.meta.url), "utf8");
+const styleModules = [
+  "tokens",
+  "themes/dark",
+  "foundation",
+  "shell",
+  "workbench",
+  "media",
+  "models",
+  "settings",
+  "providers",
+  "prompts",
+  "overlays",
+  "music",
+  "responsive",
+];
+const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async (name) => [
+  name,
+  await readFile(new URL(`../web/styles/${name}.css`, import.meta.url), "utf8"),
+])));
+const stylesSource = styleModules.map((name) => styleSources[name]).join("\n");
+const skinSource = ["tokens", "themes/dark", "shell", "workbench", "media", "models", "settings", "providers", "prompts", "overlays", "music", "responsive"]
+  .map((name) => styleSources[name])
+  .join("\n");
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -79,6 +100,14 @@ function memoryStorage(initial = {}) {
     entries: () => Object.fromEntries(values),
   };
 }
+
+test("frontend styles load as ordered modules with one isolated theme", () => {
+  assert.match(mainSource, /const STYLE_MODULES = \[[\s\S]+"tokens"[\s\S]+"themes\/dark"[\s\S]+"responsive"/);
+  assert.match(mainSource, /\.\/styles\/\$\{name\}\.css/);
+  assert.doesNotMatch(mainSource, /\.\/skin\.css|\.\/styles\.css/);
+  assert.match(styleSources["themes/dark"], /--h3ps-bg:/);
+  assert.doesNotMatch(styleSources.tokens, /--h3ps-bg:/);
+});
 
 test("API responses preserve structured server errors", async () => {
   const response = {
@@ -1330,13 +1359,23 @@ test("closed Prompt Writer does not advertise an active modal", () => {
   assert.match(mainSource, /function closeStudio\(\)[\s\S]{0,360}modal\.removeAttribute\("aria-modal"\);[\s\S]{0,100}modal\.hidden = true;/);
 });
 
+test("workbench exposes responsive stacking and layered keyboard navigation", () => {
+  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
+  assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(mainSource, /aria-haspopup="menu" aria-expanded="false" data-guide-toggle/);
+  assert.match(mainSource, /role="status" aria-live="polite" aria-atomic="true" data-status/);
+  assert.match(mainSource, /if \(event\.key === "Tab"\)[\s\S]{0,1000}focusable/);
+});
+
 test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /data-fullscreen-toggle/);
   assert.match(mainSource, /root\.classList\.toggle\("is-fullscreen", studio\.fullscreen\)/);
   assert.match(mainSource, /setAttribute\("aria-pressed", String\(studio\.fullscreen\)\)/);
   assert.match(mainSource, /if \(studio\.fullscreen\) setFullscreen\(false\)/);
   assert.match(mainSource, /saveUserPreferences\(localStorage, studio\)/);
-  assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,220}requestAnimationFrame\(updateBriefLayout\)/);
+  assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,420}requestAnimationFrame\(\(\) => \{[\s\S]{0,120}updateBriefLayout\(\)/);
+  assert.match(mainSource, /modal\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
   assert.match(stylesSource, /\.h3ps-root\.is-fullscreen \.h3ps-brief textarea \{ max-height: none; \}/);
 });

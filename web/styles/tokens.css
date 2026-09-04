@@ -1,0 +1,8 @@
+:root {
+  --h3ps-radius-sm: 6px;
+  --h3ps-radius-md: 9px;
+  --h3ps-radius-lg: 12px;
+  --h3ps-control-height: 34px;
+  --h3ps-panel-padding: clamp(16px, 1.25vw, 22px);
+  --h3ps-motion-fast: 130ms;
+}
