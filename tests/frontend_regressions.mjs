@@ -70,6 +70,7 @@ const mainSource = await readFile(new URL("../web/main.js", import.meta.url), "u
 const styleModules = [
   "tokens",
   "themes/dark",
+  "themes/light",
   "foundation",
   "shell",
   "workbench",
@@ -87,9 +88,27 @@ const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async
   await readFile(new URL(`../web/styles/${name}.css`, import.meta.url), "utf8"),
 ])));
 const stylesSource = styleModules.map((name) => styleSources[name]).join("\n");
-const skinSource = ["tokens", "themes/dark", "shell", "workbench", "media", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
+const skinSource = ["tokens", "themes/dark", "themes/light", "shell", "workbench", "media", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
   .map((name) => styleSources[name])
   .join("\n");
+const componentStyleNames = styleModules.filter((name) => !name.startsWith("themes/") && name !== "tokens");
+
+// Legacy opaque literals are kept only until the affected special-case CSS is retired.
+// Alpha colors and artwork/overlay/reference selectors are intentionally handled below.
+const HARDCODED_COLOR_WHITELIST = new Set([
+  "#3b4048", "#484850", "#494951", "#4d4d55", "#4f4f57", "#595961", "#595962", "#62626b",
+  "#686871", "#6d6d76", "#707680", "#737b87", "#7f8d9d", "#ee7049", "#fff", "#fff0eb",
+]);
+
+const HARDCODED_COLOR_SPECIAL_CASE = /(?:rgba?|hsla?|gradient|shadow|backdrop|preview|reference|mark|asset|frame|drag|toast|spinner|primary-button|disabled|drop-before|drop-after)/i;
+
+function hardcodedColorRecords(source) {
+  return [...source.matchAll(/#[0-9a-f]{3,8}\b|\b(?:white|black)(?=\s*[;,)])/gi)].map((match) => {
+    const lineStart = source.lastIndexOf("\n", match.index) + 1;
+    const lineEnd = source.indexOf("\n", match.index);
+    return { value: match[0].toLowerCase(), line: source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd) };
+  });
+}
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -101,12 +120,14 @@ function memoryStorage(initial = {}) {
   };
 }
 
-test("frontend styles load as ordered modules with one isolated theme", () => {
-  assert.match(mainSource, /const STYLE_MODULES = \[[\s\S]+"tokens"[\s\S]+"themes\/dark"[\s\S]+"responsive"/);
+test("frontend styles load as ordered modules with scoped dark and light themes", () => {
+  assert.match(mainSource, /const STYLE_MODULES = \[[\s\S]+"tokens"[\s\S]+"themes\/dark"[\s\S]+"themes\/light"[\s\S]+"responsive"/);
   assert.ok(mainSource.indexOf('"settings"') < mainSource.indexOf('"models"'));
   assert.match(mainSource, /\.\/styles\/\$\{name\}\.css/);
   assert.doesNotMatch(mainSource, /\.\/skin\.css|\.\/styles\.css/);
   assert.match(styleSources["themes/dark"], /--h3ps-bg:/);
+  assert.match(styleSources["themes/light"], /\.h3ps-root\[data-theme="light"\]\s*\{[\s\S]*--h3ps-bg:\s*#f5f7fa;/);
+  assert.doesNotMatch(styleSources["themes/light"], /(^|\n)\s*(?:html|body|:root)\b/);
   assert.doesNotMatch(styleSources.tokens, /--h3ps-bg:/);
 });
 
@@ -470,6 +491,7 @@ test("user preferences persist only stable non-secret settings", () => {
     musicLyricsUseBrief: false,
     fullscreen: true,
     vramHandoff: true,
+    theme: "light",
     selectedModel: { id: "api::secret-connection::model", api_connection_id: "secret-connection" },
     apiProviderConfig: { api_key: "must-not-be-stored" },
     creativeBrief: "must-not-be-stored",
@@ -495,6 +517,7 @@ test("user preferences persist only stable non-secret settings", () => {
     music_lyrics_use_brief: false,
     fullscreen: true,
     vram_handoff: true,
+    theme: "light",
   });
 });
 
@@ -512,6 +535,7 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
       direct_model_id: 123,
       direct_context_profile: "invalid",
       direct_kv_cache: "invalid",
+      theme: "sepia",
     }),
   });
   assert.deepEqual(loadUserPreferences(storage), {
@@ -530,6 +554,7 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
     music_lyrics_use_brief: true,
     fullscreen: false,
     vram_handoff: false,
+    theme: "dark",
   });
 });
 
@@ -549,6 +574,7 @@ test("studio restores safe preferences but not transient lifecycle state", () =>
       direct_reasoning_effort: "low",
       fullscreen: true,
       vram_handoff: true,
+      theme: "light",
       ollama_context_profile: "standard",
     }),
   });
@@ -566,6 +592,7 @@ test("studio restores safe preferences but not transient lifecycle state", () =>
   assert.equal(state.musicLyricsUseBrief, true);
   assert.equal(state.fullscreen, true);
   assert.equal(state.vramHandoff, true);
+  assert.equal(state.theme, "light");
   assert.equal(state.ollamaContextProfile, undefined);
   assert.equal(state.keepModelLoaded, false);
   assert.equal(state.thinking, false);
@@ -578,6 +605,7 @@ test("a clean first run defaults to Ollama while saved provider preferences rema
   assert.equal(clean.settingsProvider, "ollama");
   assert.equal(clean.preferredProvider, "ollama");
   assert.equal(clean.vramHandoff, false);
+  assert.equal(clean.theme, "dark");
 
   const saved = createStudioState({
     sessionId: "saved",
@@ -1360,6 +1388,35 @@ test("closed Prompt Writer does not advertise an active modal", () => {
   assert.match(mainSource, /function closeStudio\(\)[\s\S]{0,360}modal\.removeAttribute\("aria-modal"\);[\s\S]{0,100}modal\.hidden = true;/);
 });
 
+test("theme selection is scoped, persisted, and exposed in the main header", () => {
+  const markup = settingsMarkup(() => "");
+  assert.doesNotMatch(markup, /data-theme-option|Color theme/);
+  assert.match(mainSource, /data-theme-toggle>\$\{icon\("sun", 17\)\}/);
+  assert.match(mainSource, /icon\(light \? "moon" : "sun", 17\)/);
+  assert.match(mainSource, /studio\.root\.dataset\.theme = studio\.theme/);
+  assert.match(mainSource, /setTheme\(studio\.theme === "light" \? "dark" : "light"\)/);
+  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{[\s\S]*--h3ps-bg:\s*#09090a;[\s\S]*color-scheme:\s*dark;/);
+  assert.match(styleSources["themes/light"], /\.h3ps-root\[data-theme="light"\]\s*\{[\s\S]*--h3ps-text:\s*#1f2935;[\s\S]*color-scheme:\s*light;/);
+  assert.match(styleSources.settings, /background:\s*var\(--h3ps-settings-header\)/);
+  assert.match(styleSources.workbench, /background:\s*var\(--h3ps-output-surface\)/);
+  assert.match(styleSources.settings, /background:\s*var\(--h3ps-field\)/);
+});
+
+test("theme maintenance guard keeps component colors on the token path", () => {
+  const colorViolations = [];
+  for (const name of componentStyleNames) {
+    for (const record of hardcodedColorRecords(styleSources[name])) {
+      if (!HARDCODED_COLOR_WHITELIST.has(record.value) && !HARDCODED_COLOR_SPECIAL_CASE.test(record.line)) {
+        colorViolations.push(`${name}: ${record.value}`);
+      }
+    }
+  }
+  assert.deepEqual(colorViolations, [], "new opaque component colors need a theme token or an explicit special-case whitelist");
+  assert.match(styleSources.tokens, /--h3ps-accent:\s*#e8613c;/);
+  assert.doesNotMatch(styleSources["themes/dark"], /--h3ps-accent:/);
+  assert.match(styleSources["themes/light"], /--h3ps-surface-raised:\s*var\(--h3ps-surface\);/);
+  assert.match(styleSources["themes/light"], /--h3ps-border-control:\s*var\(--h3ps-border\);/);
+});
 test("workbench exposes responsive stacking and layered keyboard navigation", () => {
   assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
   assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
@@ -1386,7 +1443,7 @@ test("focus styling stays visible for controls without outlining the dialog shel
   assert.match(styleSources.foundation, /\.h3ps-root \.h3ps-modal:focus,[\s\S]{0,80}\.h3ps-root \.h3ps-modal:focus-visible\s*\{\s*outline:\s*none !important;/);
   assert.match(styleSources.foundation, /\.h3ps-floating-launcher:focus-visible\s*\{[^}]*outline:\s*2px solid rgba\(232, 97, 60, \.72\) !important/);
   assert.doesNotMatch(styleSources.settings, /\.h3ps-provider-selector > button:focus-visible\s*\{[^}]*outline:\s*0/);
-  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{\s*color-scheme:\s*dark;/);
+  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{[\s\S]*color-scheme:\s*dark;/);
   assert.doesNotMatch(styleSources["themes/dark"], /:root\s*\{[^}]*color-scheme:/);
 });
 

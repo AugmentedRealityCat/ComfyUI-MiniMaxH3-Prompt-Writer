@@ -91,38 +91,38 @@
   .h3ps-editor, .h3ps-editor-highlight { font-size:12px !important; line-height:1.62 !important; }
   .h3ps-model-picker { margin-top:14px; }
   .h3ps-model-row { min-height:54px; gap:10px; padding:7px 9px 7px 10px; }
-  .h3ps-model-row small { color:#aeb4be; font-size:10.5px; }
+  .h3ps-model-row small { color:var(--h3ps-text-responsive-row); font-size:10.5px; }
   .h3ps-model-row strong { font-size:12px; }
   .h3ps-model-lifecycle, .h3ps-model-lifecycle button { font-size:9.5px; }
   .h3ps-model-menu > header { height:54px; padding-right:13px; padding-left:15px; }
   .h3ps-model-menu > header strong { font-size:12px; }
-  .h3ps-model-menu > header small { color:#9299a5; font-size:10px; }
+  .h3ps-model-menu > header small { color:var(--h3ps-text-responsive-header); font-size:10px; }
   .h3ps-model-menu > header button { height:29px; font-size:10px; }
   .h3ps-model-options { padding:8px; }
   .h3ps-model-setup { padding:12px; }
   .h3ps-model-setup > strong { font-size:12px; }
-  .h3ps-model-setup > p { margin:4px 0 10px; color:#9ba2ad; font-size:10.5px; line-height:1.45; }
+  .h3ps-model-setup > p { margin:4px 0 10px; color:var(--h3ps-text-responsive-copy); font-size:10.5px; line-height:1.45; }
   .h3ps-model-path { height:34px; padding:0 10px; }
   .h3ps-model-path code { font-size:10px; }
   .h3ps-model-setup-list { gap:5px; margin-top:10px; }
   .h3ps-model-setup-row { min-height:55px; padding:8px 9px; }
   .h3ps-model-setup-row strong { font-size:10.5px; }
-  .h3ps-model-setup-row small { margin-top:2px; color:#a6adb7; font-size:9.5px; line-height:1.35; }
+  .h3ps-model-setup-row small { margin-top:2px; color:var(--h3ps-text-responsive-help); font-size:9.5px; line-height:1.35; }
   .h3ps-model-setup-row .h3ps-model-source { color:#7f8d9d; }
   .h3ps-model-files > button, .h3ps-model-files a { font-size:9.5px; }
   .h3ps-other-models-trigger { min-height:46px; padding:0 10px; }.h3ps-other-models-trigger strong { font-size:11px; }.h3ps-other-models-trigger small { font-size:9.5px; }
   .h3ps-other-models-popover > header { height:54px; }.h3ps-other-models-popover > header strong { font-size:12px; }.h3ps-other-models-popover > header small { font-size:10px; }
   .h3ps-model-option { min-height:52px; padding:7px 9px; }
   .h3ps-model-option > span:nth-child(2) strong { font-size:11.5px; }
-  .h3ps-model-option > span:nth-child(2) small { color:#9fa6b1; font-size:9.5px; }
+  .h3ps-model-option > span:nth-child(2) small { color:var(--h3ps-text-responsive); font-size:9.5px; }
   .h3ps-model-tags em { font-size:9px; }
   .h3ps-model-menu > footer { height:42px; gap:16px; padding:0 14px; }
-  .h3ps-model-menu > footer span { color:#9fa6b1; font-size:9.5px; }
+  .h3ps-model-menu > footer span { color:var(--h3ps-text-responsive); font-size:9.5px; }
   .h3ps-runtime-settings, .h3ps-system-settings { margin-top:9px; }
   .h3ps-runtime-settings summary, .h3ps-system-settings summary { min-height:40px; padding:0 12px; font-size:10.75px; }
-  .h3ps-runtime-settings summary small, .h3ps-system-settings summary small { color:#9fa6b1; font-size:9.5px; }
+  .h3ps-runtime-settings summary small, .h3ps-system-settings summary small { color:var(--h3ps-text-responsive); font-size:9.5px; }
   .h3ps-runtime-control > span:first-child, .h3ps-runtime-settings [data-runtime-toggle] b { font-size:10px; }
-  .h3ps-system-editor p { color:#9299a4; font-size:9.5px; }
+  .h3ps-system-editor p { color:var(--h3ps-text-responsive-editor); font-size:9.5px; }
   .h3ps-system-editor textarea { font-size:10px; }
 }
 

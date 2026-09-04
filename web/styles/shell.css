@@ -14,7 +14,7 @@
   height: min(980px, calc(100vh - 56px));
   overflow: hidden;
   transform: translateX(-50%);
-  border: 1px solid #242429;
+  border: 1px solid var(--h3ps-border-shell);
   border-radius: 14px;
   background: var(--h3ps-bg);
   box-shadow: var(--h3ps-shadow);
@@ -56,7 +56,7 @@
   transition: color var(--h3ps-motion-fast), border-color var(--h3ps-motion-fast), background var(--h3ps-motion-fast);
 }
 .h3ps-guide-button:hover,
-.h3ps-secondary-button:hover { border-color: #3b3b42; background: var(--h3ps-surface-3); color: var(--h3ps-text); }
+.h3ps-secondary-button:hover { border-color: var(--h3ps-border-button-hover); background: var(--h3ps-surface-3); color: var(--h3ps-text); }
 .h3ps-guide-button svg { color: var(--h3ps-muted); transform: rotate(90deg); }
 .h3ps-guide-button[aria-expanded="true"] svg { transform: rotate(-90deg); }
 
@@ -67,7 +67,7 @@
   right: 0;
   width: 330px;
   padding: 5px;
-  border: 1px solid #303037;
+  border: 1px solid var(--h3ps-border-floating);
   border-radius: var(--h3ps-radius-md);
   background: var(--h3ps-surface-raised);
   box-shadow: 0 16px 48px rgba(0, 0, 0, .62);

@@ -106,6 +106,7 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
       music_lyrics_use_brief: value.music_lyrics_use_brief !== false,
       fullscreen: value.fullscreen === true,
       vram_handoff: value.vram_handoff === true,
+      theme: value.theme === "light" ? "light" : "dark",
     };
   } catch {
     return null;
@@ -129,6 +130,7 @@ export function saveUserPreferences(storage, state) {
     music_lyrics_use_brief: state.musicLyricsUseBrief !== false,
     fullscreen: state.fullscreen === true,
     vram_handoff: state.vramHandoff === true,
+    theme: state.theme === "light" ? "light" : "dark",
   };
   storage?.setItem(USER_PREFERENCES_STORAGE_KEY, JSON.stringify(safe));
 }
@@ -440,6 +442,7 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     directReasoningEffort: preferences?.direct_reasoning_effort || "auto",
     musicLyricsUseBrief: preferences?.music_lyrics_use_brief !== false,
     fullscreen: preferences?.fullscreen === true,
+    theme: preferences?.theme === "light" ? "light" : "dark",
     settingsPromptProfile: "standard",
     musicSystemPromptProfile: "music3",
     musicSystemPromptExpanded: false,

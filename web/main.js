@@ -339,6 +339,7 @@ function syncModifiedState() {
 const STYLE_MODULES = [
   "tokens",
   "themes/dark",
+  "themes/light",
   "foundation",
   "shell",
   "workbench",
@@ -380,6 +381,8 @@ function icon(name, size = 16) {
     memory: '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/>',
     expand: '<path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"/>',
     collapse: '<path d="M8 8H3V3m13 5h5V3M8 16H3v5m13-5h5v5"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
+    moon: '<path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z"/>',
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${paths[name] || paths.info}</svg>`;
 }
@@ -2837,6 +2840,25 @@ function syncFullscreenState() {
   button.innerHTML = icon(studio.fullscreen ? "collapse" : "expand", 17);
 }
 
+function syncTheme() {
+  if (!studio) return;
+  studio.root.dataset.theme = studio.theme;
+  const button = studio.root.querySelector("[data-theme-toggle]");
+  if (!button) return;
+  const light = studio.theme === "light";
+  button.innerHTML = icon(light ? "moon" : "sun", 17);
+  button.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+  button.title = light ? "Switch to dark theme" : "Switch to light theme";
+  button.setAttribute("aria-pressed", String(light));
+}
+
+function setTheme(theme) {
+  if (!studio) return;
+  studio.theme = theme === "light" ? "light" : "dark";
+  syncTheme();
+  saveUserPreferences(localStorage, studio);
+}
+
 function setFullscreen(fullscreen) {
   if (!studio || studio.fullscreen === fullscreen) return;
   studio.fullscreen = fullscreen;
@@ -2870,6 +2892,7 @@ function createStudio() {
             <div class="h3ps-guide-menu" data-guide-menu hidden><span>Loading guides…</span></div>
           </div>
           <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
+          <button class="h3ps-icon-button" type="button" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false" data-theme-toggle>${icon("sun", 17)}</button>
           <button class="h3ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
           <button class="h3ps-icon-button" type="button" title="Close" data-close-studio>${icon("close", 18)}</button>
         </div>
@@ -3059,9 +3082,11 @@ function createStudio() {
   root.querySelectorAll("[data-aspect]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.aspect === restoredAspect[0]));
   });
+  syncTheme();
   syncFullscreenState();
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
   root.querySelector("[data-fullscreen-toggle]").addEventListener("click", () => setFullscreen(!studio.fullscreen));
+  root.querySelector("[data-theme-toggle]").addEventListener("click", () => setTheme(studio.theme === "light" ? "dark" : "light"));
   root.addEventListener("click", (event) => {
     if (studio.draftDefaultsArmed && !event.target.closest("[data-restore-default-drafts]")) disarmDraftDefaults();
     if (studio.toastDismissOnWorkspaceClick && !event.target.closest("[data-h3ps-toast]")) hideToast();
