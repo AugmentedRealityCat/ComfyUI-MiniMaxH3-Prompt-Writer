@@ -7,6 +7,7 @@ export const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 export const API_PROVIDER_STORAGE_KEY = "h3ps-api-provider-v1";
 export const USER_PREFERENCES_STORAGE_KEY = "h3ps-preferences-v1";
 export const MODE_DRAFTS_STORAGE_KEY = "h3ps-mode-drafts-v1";
+export const INTERFACE_SIZES = ["100", "110", "120", "125"];
 
 const MODES = ["T2VA", "I2VA", "FL2VA", "L2VA", "Reference", "Music3"];
 const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"];
@@ -107,6 +108,7 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
       fullscreen: value.fullscreen === true,
       vram_handoff: value.vram_handoff === true,
       theme: value.theme === "light" ? "light" : "dark",
+      interface_size: INTERFACE_SIZES.includes(value.interface_size) ? value.interface_size : "100",
     };
   } catch {
     return null;
@@ -131,6 +133,7 @@ export function saveUserPreferences(storage, state) {
     fullscreen: state.fullscreen === true,
     vram_handoff: state.vramHandoff === true,
     theme: state.theme === "light" ? "light" : "dark",
+    interface_size: INTERFACE_SIZES.includes(state.interfaceSize) ? state.interfaceSize : "100",
   };
   storage?.setItem(USER_PREFERENCES_STORAGE_KEY, JSON.stringify(safe));
 }
@@ -443,6 +446,7 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     musicLyricsUseBrief: preferences?.music_lyrics_use_brief !== false,
     fullscreen: preferences?.fullscreen === true,
     theme: preferences?.theme === "light" ? "light" : "dark",
+    interfaceSize: INTERFACE_SIZES.includes(preferences?.interface_size) ? preferences.interface_size : "100",
     settingsPromptProfile: "standard",
     musicSystemPromptProfile: "music3",
     musicSystemPromptExpanded: false,

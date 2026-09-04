@@ -13,6 +13,7 @@ import {
   isPersistedDraftMode,
   isTextOnlyDirectModel,
   DEFAULT_OLLAMA_HOST,
+  INTERFACE_SIZES,
   loadOllamaModel,
   loadOllamaHost,
   loadUserPreferences,
@@ -31,6 +32,7 @@ import {
 import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff, isLocalOllamaHost, releaseComfyVramWhenIdle, unloadWriterModels } from "./vram_handoff.js";
 
 const EXTENSION_NAME = "minimax.h3.prompt.studio";
+const LAUNCHER_SCHEMA_VERSION = "2";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
 const vramHandoffCoordinator = createVramHandoffCoordinator();
 const INSTALLATION_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/INSTALLATION.md";
@@ -384,7 +386,7 @@ function icon(name, size = 16) {
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
     moon: '<path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z"/>',
   };
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${paths[name] || paths.info}</svg>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--h3ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
 }
 
 function renderAsset(asset, index) {
@@ -2859,6 +2861,43 @@ function setTheme(theme) {
   saveUserPreferences(localStorage, studio);
 }
 
+function syncInterfaceSize() {
+  if (!studio) return;
+  const size = INTERFACE_SIZES.includes(studio.interfaceSize) ? studio.interfaceSize : "100";
+  const index = INTERFACE_SIZES.indexOf(size);
+  studio.interfaceSize = size;
+  studio.root.dataset.interfaceSize = size;
+  const slider = studio.root.querySelector("[data-interface-size-range]");
+  const output = studio.root.querySelector("[data-interface-size-value]");
+  const button = studio.root.querySelector("[data-interface-size-toggle]");
+  if (slider) {
+    slider.value = String(index);
+    slider.setAttribute("aria-valuetext", `${size}%`);
+    slider.style.setProperty("--h3ps-range", `${index / (INTERFACE_SIZES.length - 1) * 100}%`);
+  }
+  if (output) output.textContent = `${size}%`;
+  if (button) {
+    button.setAttribute("aria-label", `Interface size ${size}%`);
+    button.title = `Interface size ${size}%`;
+  }
+}
+
+function setInterfaceSize(size) {
+  if (!studio) return;
+  studio.interfaceSize = INTERFACE_SIZES.includes(String(size)) ? String(size) : "100";
+  syncInterfaceSize();
+  saveUserPreferences(localStorage, studio);
+}
+
+function setInterfaceSizeMenuOpen(open, restoreFocus = false) {
+  if (!studio) return;
+  const menu = studio.root.querySelector("[data-interface-size-menu]");
+  const button = studio.root.querySelector("[data-interface-size-toggle]");
+  menu.hidden = !open;
+  button.setAttribute("aria-expanded", String(open));
+  if (restoreFocus) button.focus();
+}
+
 function setFullscreen(fullscreen) {
   if (!studio || studio.fullscreen === fullscreen) return;
   studio.fullscreen = fullscreen;
@@ -2893,6 +2932,14 @@ function createStudio() {
           </div>
           <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
           <button class="h3ps-icon-button" type="button" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false" data-theme-toggle>${icon("sun", 17)}</button>
+          <div class="h3ps-interface-size-picker" data-interface-size-picker>
+            <button class="h3ps-icon-button h3ps-interface-size-button" type="button" title="Interface size 100%" aria-label="Interface size 100%" aria-haspopup="true" aria-expanded="false" data-interface-size-toggle>Aa</button>
+            <div class="h3ps-interface-size-menu" data-interface-size-menu hidden>
+              <header><strong>Interface Size</strong><output data-interface-size-value>100%</output></header>
+              <input type="range" min="0" max="3" step="1" value="0" aria-label="Interface size" data-interface-size-range>
+              <div class="h3ps-interface-size-marks" aria-hidden="true"><span>100%</span><span>110%</span><span>120%</span><span>125%</span></div>
+            </div>
+          </div>
           <button class="h3ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
           <button class="h3ps-icon-button" type="button" title="Close" data-close-studio>${icon("close", 18)}</button>
         </div>
@@ -3083,10 +3130,18 @@ function createStudio() {
     button.setAttribute("aria-pressed", String(button.dataset.aspect === restoredAspect[0]));
   });
   syncTheme();
+  syncInterfaceSize();
   syncFullscreenState();
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
   root.querySelector("[data-fullscreen-toggle]").addEventListener("click", () => setFullscreen(!studio.fullscreen));
   root.querySelector("[data-theme-toggle]").addEventListener("click", () => setTheme(studio.theme === "light" ? "dark" : "light"));
+  root.querySelector("[data-interface-size-toggle]").addEventListener("click", () => {
+    const menu = root.querySelector("[data-interface-size-menu]");
+    setInterfaceSizeMenuOpen(menu.hidden);
+  });
+  root.querySelector("[data-interface-size-range]").addEventListener("input", (event) => {
+    setInterfaceSize(INTERFACE_SIZES[Number(event.target.value)] || "100");
+  });
   root.addEventListener("click", (event) => {
     if (studio.draftDefaultsArmed && !event.target.closest("[data-restore-default-drafts]")) disarmDraftDefaults();
     if (studio.toastDismissOnWorkspaceClick && !event.target.closest("[data-h3ps-toast]")) hideToast();
@@ -3100,6 +3155,7 @@ function createStudio() {
       root.querySelectorAll("[data-guide-menu]").forEach((menu) => { menu.hidden = true; });
       root.querySelector("[data-guide-toggle]")?.setAttribute("aria-expanded", "false");
     }
+    if (!event.target.closest("[data-interface-size-picker]")) setInterfaceSizeMenuOpen(false);
     if (!event.target.closest("[data-model-files-toggle], [data-model-files-menu]")) {
       root.querySelectorAll("[data-model-files-menu]").forEach((menu) => { menu.hidden = true; });
     }
@@ -3604,12 +3660,15 @@ function closeStudio() {
 }
 
 function installLauncher() {
-  if (document.querySelector("[data-h3ps-launcher]")) return;
+  const existingLauncher = document.querySelector("[data-h3ps-launcher]");
+  if (existingLauncher?.dataset.h3psLauncherVersion === LAUNCHER_SCHEMA_VERSION) return;
+  existingLauncher?.remove();
   document.querySelector("[data-h3ps-launcher-group]")?.remove();
   const launcher = document.createElement("button");
   launcher.type = "button";
   launcher.className = "h3ps-floating-launcher";
   launcher.dataset.h3psLauncher = "true";
+  launcher.dataset.h3psLauncherVersion = LAUNCHER_SCHEMA_VERSION;
   launcher.setAttribute("aria-label", "Open H3 Prompt Writer");
   launcher.title = "Open H3 Prompt Writer · drag to move";
   const launcherIcon = new URL("./assets/h3-prompt-writer-launcher.svg", import.meta.url).href;
@@ -3717,10 +3776,13 @@ document.addEventListener("keydown", (event) => {
       return;
     }
     const guideMenu = studio.root.querySelector("[data-guide-menu]");
+    const interfaceSizeMenu = studio.root.querySelector("[data-interface-size-menu]");
     const choiceMenu = Array.from(studio.root.querySelectorAll("[data-choice-menu]")).find((menu) => !menu.hidden);
     const runtimeMenu = Array.from(studio.root.querySelectorAll("[data-runtime-menu]")).find((menu) => !menu.hidden);
     const referenceMenu = studio.root.querySelector("[data-reference-insert-popover]");
-    if (!guideMenu.hidden) {
+    if (!interfaceSizeMenu.hidden) {
+      setInterfaceSizeMenuOpen(false, true);
+    } else if (!guideMenu.hidden) {
       guideMenu.hidden = true;
       const toggle = studio.root.querySelector("[data-guide-toggle]");
       toggle.setAttribute("aria-expanded", "false");

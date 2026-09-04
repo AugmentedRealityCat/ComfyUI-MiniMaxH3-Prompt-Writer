@@ -101,6 +101,7 @@ const HARDCODED_COLOR_WHITELIST = new Set([
 ]);
 
 const HARDCODED_COLOR_SPECIAL_CASE = /(?:rgba?|hsla?|gradient|shadow|backdrop|preview|reference|mark|asset|frame|drag|toast|spinner|primary-button|disabled|drop-before|drop-after)/i;
+const INTERFACE_FIXED_FONT_SELECTOR = /(?:h3ps-section-heading|h3ps-section-hint|h3ps-clear-control|h3ps-output-actions|h3ps-memory-action|h3ps-toggle-control|h3ps-primary-button|h3ps-settings-heading)/i;
 
 function hardcodedColorRecords(source) {
   return [...source.matchAll(/#[0-9a-f]{3,8}\b|\b(?:white|black)(?=\s*[;,)])/gi)].map((match) => {
@@ -108,6 +109,22 @@ function hardcodedColorRecords(source) {
     const lineEnd = source.indexOf("\n", match.index);
     return { value: match[0].toLowerCase(), line: source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd) };
   });
+}
+
+function fixedFontSizeViolations(source) {
+  const violations = [];
+  for (const block of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = block[1].trim();
+    for (const declaration of block[2].matchAll(/font-size\s*:\s*([^;}]*)/g)) {
+      const value = declaration[1].trim();
+      const tokenized = /var\(--h3ps-(?:font|toast-font|interface-scale)/.test(value);
+      const relative = /^[-+]?\d*\.?\d+(?:em|rem|%)$/.test(value) || value === "0";
+      if (!tokenized && !relative && !INTERFACE_FIXED_FONT_SELECTOR.test(selector)) {
+        violations.push(`${selector} -> ${value}`);
+      }
+    }
+  }
+  return violations;
 }
 
 function memoryStorage(initial = {}) {
@@ -492,6 +509,7 @@ test("user preferences persist only stable non-secret settings", () => {
     fullscreen: true,
     vramHandoff: true,
     theme: "light",
+    interfaceSize: "125",
     selectedModel: { id: "api::secret-connection::model", api_connection_id: "secret-connection" },
     apiProviderConfig: { api_key: "must-not-be-stored" },
     creativeBrief: "must-not-be-stored",
@@ -518,6 +536,7 @@ test("user preferences persist only stable non-secret settings", () => {
     fullscreen: true,
     vram_handoff: true,
     theme: "light",
+    interface_size: "125",
   });
 });
 
@@ -536,6 +555,7 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
       direct_context_profile: "invalid",
       direct_kv_cache: "invalid",
       theme: "sepia",
+      interface_size: "140",
     }),
   });
   assert.deepEqual(loadUserPreferences(storage), {
@@ -555,6 +575,7 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
     fullscreen: false,
     vram_handoff: false,
     theme: "dark",
+    interface_size: "100",
   });
 });
 
@@ -575,6 +596,7 @@ test("studio restores safe preferences but not transient lifecycle state", () =>
       fullscreen: true,
       vram_handoff: true,
       theme: "light",
+      interface_size: "120",
       ollama_context_profile: "standard",
     }),
   });
@@ -593,6 +615,7 @@ test("studio restores safe preferences but not transient lifecycle state", () =>
   assert.equal(state.fullscreen, true);
   assert.equal(state.vramHandoff, true);
   assert.equal(state.theme, "light");
+  assert.equal(state.interfaceSize, "120");
   assert.equal(state.ollamaContextProfile, undefined);
   assert.equal(state.keepModelLoaded, false);
   assert.equal(state.thinking, false);
@@ -606,6 +629,7 @@ test("a clean first run defaults to Ollama while saved provider preferences rema
   assert.equal(clean.preferredProvider, "ollama");
   assert.equal(clean.vramHandoff, false);
   assert.equal(clean.theme, "dark");
+  assert.equal(clean.interfaceSize, "100");
 
   const saved = createStudioState({
     sessionId: "saved",
@@ -718,7 +742,7 @@ test("clear prompts removes brief and generated output while preserving lyrics a
   assert.match(mainSource, /if \(!await clearCurrentMedia\(\{ notify: false \}\)\) return;/);
   assert.match(stylesSource, /\.h3ps-clear-control \{[^}]*display: inline-flex;[^}]*border-radius: 7px;/);
   assert.match(stylesSource, /\.h3ps-clear-menu \{[^}]*right: -20px;[^}]*width: max-content;[^}]*max-width: calc\(100vw - 24px\);/);
-  assert.match(stylesSource, /\.h3ps-clear-menu button \{[^}]*display: grid;[^}]*min-height: 42px;/);
+  assert.match(stylesSource, /\.h3ps-clear-menu button \{[^}]*display: grid;[^}]*min-height: calc\(42px \* var\(--h3ps-interface-scale\)\);/);
   assert.match(stylesSource, /\.h3ps-clear-menu button strong \{[^}]*font-size: 1em;[^}]*letter-spacing: normal;/);
 });
 
@@ -730,7 +754,7 @@ test("custom contact sheet counts accept only whole values from 2 through 16", (
   }
   assert.match(mainSource, /data-frame-custom-toggle>Custom<\/button><input[^>]+min="2" max="16"[^>]+data-frame-custom-count hidden/);
   assert.match(mainSource, /resampleCurrentVideo\(\{ frame_count: selected \}\)/);
-  assert.match(stylesSource, /\.h3ps-frame-custom-count \{[^}]*width:42px;[^}]*text-align:center;/);
+  assert.match(stylesSource, /\.h3ps-frame-custom-count \{[^}]*width:calc\(42px \* var\(--h3ps-interface-scale\)\);[^}]*text-align:center;/);
 });
 
 test("video drafts preserve the 8000 character brief while Music keeps 2000", () => {
@@ -855,6 +879,7 @@ test("Reference assets replace one dropped file and append multiple dropped file
 test("media card overlays stay inside the thumbnail and below previews", () => {
   assert.match(stylesSource, /\.h3ps-duration\s*\{[^}]*position:\s*absolute;[^}]*right:\s*7px;[^}]*bottom:\s*49px;/);
   assert.match(stylesSource, /\.h3ps-replace-asset, \.h3ps-remove-asset \{[^}]*width:\s*22px;[^}]*height:\s*22px;/);
+  assert.match(stylesSource, /\.h3ps-root \.h3ps-replace-asset svg, \.h3ps-root \.h3ps-remove-asset svg \{ width:12px; height:12px; \}/);
   assert.match(stylesSource, /\.h3ps-replace-asset \{[^}]*top:\s*32px;[^}]*right:\s*6px;/);
   assert.match(stylesSource, /\.h3ps-asset:hover \.h3ps-replace-asset[^}]*opacity:\s*1;/);
   assert.match(stylesSource, /\.h3ps-asset:hover \.h3ps-remove-asset[^}]*opacity:\s*1;/);
@@ -1136,7 +1161,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(mainSource, /data-ollama-model/);
   assert.match(mainSource, /data-ollama-add-model/);
   assert.match(mainSource, /\+ Add model/);
-  assert.match(skinSource, /h3ps-root \.h3ps-ollama-add-model-toggle[^}]+color: var\(--h3ps-accent-strong\)[^}]+font-size: 9\.5px[^}]+cursor: pointer/);
+  assert.match(skinSource, /h3ps-root \.h3ps-ollama-add-model-toggle[^}]+color: var\(--h3ps-accent-strong\)[^}]+font-size: var\(--h3ps-font-label-sm\)[^}]+cursor: pointer/);
   assert.match(skinSource, /h3ps-ollama-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
   assert.match(skinSource, /h3ps-api-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
   assert.match(mainSource, /Choose another tested model/);
@@ -1162,7 +1187,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
 test("Reference defaults use plain Picture 1 and Video 1 text while canonical tags remain user-authored", () => {
   assert.match(mainSource, /const REFERENCE_DEFAULT_BRIEF = ["`][^"`]*Picture 1[^"`]*Video 1[^"`]*["`]/s);
   assert.doesNotMatch(mainSource.match(/const REFERENCE_DEFAULT_BRIEF = ["`][^"`]*["`]/s)?.[0] || "", /<Picture 1>|<Video 1>/);
-  assert.match(skinSource, /\.h3ps-root\.is-fullscreen \.h3ps-assets:has\(> \.h3ps-empty-drop:only-child\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(skinSource, /\.h3ps-assets:has\(> \.h3ps-empty-drop:only-child\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
 test("Settings shows compact global System Prompt summaries and an on-demand editor", () => {
@@ -1417,8 +1442,75 @@ test("theme maintenance guard keeps component colors on the token path", () => {
   assert.match(styleSources["themes/light"], /--h3ps-surface-raised:\s*var\(--h3ps-surface\);/);
   assert.match(styleSources["themes/light"], /--h3ps-border-control:\s*var\(--h3ps-border\);/);
 });
+test("interface size is token-based, persisted, and exposed as a header slider", () => {
+  const markup = settingsMarkup(() => "");
+  assert.doesNotMatch(markup, /Interface Size|data-interface-size/);
+  assert.match(mainSource, /data-interface-size-toggle>Aa<\/button>/);
+  assert.match(mainSource, /type="range" min="0" max="3" step="1"[^>]*data-interface-size-range/);
+  assert.match(mainSource, /INTERFACE_SIZES\[Number\(event\.target\.value\)\]/);
+  assert.match(mainSource, /setAttribute\("aria-valuetext", `\$\{size\}%`\)/);
+  assert.match(mainSource, /studio\.root\.dataset\.interfaceSize = size/);
+  assert.match(styleSources.tokens, /--h3ps-interface-scale:\s*1;/);
+  assert.match(styleSources.tokens, /\[data-interface-size="110"\][^}]*--h3ps-interface-scale:\s*1\.1/);
+  assert.match(styleSources.tokens, /\[data-interface-size="120"\][^}]*--h3ps-interface-scale:\s*1\.2/);
+  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--h3ps-interface-scale:\s*1\.25/);
+  assert.match(styleSources.tokens, /--h3ps-font-body:\s*calc\(12px \* var\(--h3ps-interface-scale\)\)/);
+  assert.match(styleSources.foundation, /--h3ps-icon-size\) \* var\(--h3ps-interface-scale\)/);
+  assert.match(styleSources.tokens, /--h3ps-interface-scale-soft:\s*1;/);
+  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--h3ps-interface-scale-soft:\s*1\.125/);
+  assert.match(styleSources.settings, /\.h3ps-settings-heading > \.h3ps-secondary-button \{[^}]*height:calc\(30px \* var\(--h3ps-interface-scale-soft\)\);[^}]*font-size:calc\(10\.5px \* var\(--h3ps-interface-scale-soft\)\);/);
+  assert.match(styleSources.workbench, /\.h3ps-output-actions \.h3ps-secondary-button \{[^}]*height: 34px;[^}]*font-size: 11px;/);
+  assert.match(styleSources.workbench, /\.h3ps-memory-action \{[^}]*height: 30px;[^}]*font-size: 10px;/);
+  assert.match(styleSources.workbench, /\.h3ps-toggle-control \{[^}]*min-height: 28px;[^}]*font-size: 10\.5px;/);
+  assert.match(styleSources.workbench, /\.h3ps-primary-button \{[^}]*height: 36px;[^}]*font-size: 10\.5px;/);
+  assert.match(styleSources.workbench, /\.h3ps-section-heading strong \{ font-size: 15px; \}/);
+  assert.match(styleSources.overlays, /\.h3ps-preview-dialog header > span \{[^}]*flex-direction:column;/);
+  assert.match(styleSources.shell, /\.h3ps-guide-menu \{[^}]*background: var\(--h3ps-popover\)/);
+  assert.match(styleSources.shell, /\.h3ps-guide-menu a:hover \{ background: var\(--h3ps-menu-hover\); \}/);
+  assert.match(styleSources.tokens, /--h3ps-toast-scale:\s*calc\(1\.25 \* var\(--h3ps-interface-scale\)\)/);
+  assert.match(styleSources.overlays, /min-width:\s*min\(var\(--h3ps-toast-min-width\), calc\(100vw - 24px\)\)/);
+  assert.match(styleSources.overlays, /font-size:\s*var\(--h3ps-toast-font-title\)/);
+  assert.match(styleSources.workbench, /\.h3ps-spinner \{[^}]*display:inline-block;[^}]*animation: h3ps-spin \.7s linear infinite;/);
+  assert.match(styleSources.responsive, /prefers-reduced-motion:[^)]+\)[\s\S]*\.h3ps-root \.h3ps-spinner \{[^}]*animation-duration: \.7s !important;[^}]*animation-iteration-count: infinite !important;/);
+  assert.doesNotMatch(styleSources.shell, /h3ps-guide-menu a:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.models, /h3ps-direct-advanced > summary:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.providers, /h3ps-runtime-menu button:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.overlays, /h3ps-model-setup-row:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.match(styleSources.media, /\.h3ps-asset, \.h3ps-add-asset \{[^}]*height:\s*150px;/);
+  assert.doesNotMatch(stylesSource, /\.is-large-text|text-large\.css|zoom:/);
+  assert.doesNotMatch(styleSources["themes/dark"] + styleSources["themes/light"], /interface-size|interface-scale/);
+});
+
+test("interface maintenance guard keeps readable font sizes on semantic tokens", () => {
+  const violations = componentStyleNames.flatMap((name) => fixedFontSizeViolations(styleSources[name].replaceAll("\r", "")));
+  assert.deepEqual(violations, [], "ordinary readable UI font sizes should use semantic tokens");
+});
+
+test("theme and interface size preferences remain independent at both endpoints", () => {
+  for (const theme of ["dark", "light"]) {
+    for (const interfaceSize of ["100", "125"]) {
+      const state = createStudioState({
+        sessionId: `${theme}-${interfaceSize}`,
+        storage: memoryStorage({
+          [USER_PREFERENCES_STORAGE_KEY]: JSON.stringify({ version: 1, theme, interface_size: interfaceSize }),
+        }),
+      });
+      assert.equal(state.theme, theme);
+      assert.equal(state.interfaceSize, interfaceSize);
+    }
+  }
+});
+test("the current launcher replaces stale duplicate extension launchers", () => {
+  assert.match(mainSource, /const LAUNCHER_SCHEMA_VERSION = "2"/);
+  assert.match(mainSource, /existingLauncher\?\.dataset\.h3psLauncherVersion === LAUNCHER_SCHEMA_VERSION/);
+  assert.match(mainSource, /existingLauncher\?\.remove\(\)/);
+  assert.match(mainSource, /launcher\.dataset\.h3psLauncherVersion = LAUNCHER_SCHEMA_VERSION/);
+});
+
 test("workbench exposes responsive stacking and layered keyboard navigation", () => {
   assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
+  assert.match(styleSources.shell, /\.h3ps-modal > \* \{ min-width: 0; \}/);
+  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-header \{ flex-wrap: wrap; \}/);
   assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(mainSource, /aria-expanded="false" data-guide-toggle/);
   assert.doesNotMatch(mainSource, /role="(?:menu|menuitem|listbox|option)"|aria-haspopup="menu"/);
