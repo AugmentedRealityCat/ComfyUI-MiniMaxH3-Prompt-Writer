@@ -57,6 +57,13 @@ export function uploadMedia(sessionId, mode, files, replaceAssetId = null) {
 }
 
 export const listMedia = (sessionId) => request(`/media?session_id=${encodeURIComponent(sessionId)}`);
+export async function editMedia(sessionId, assetId, options) {
+  const response = await api.fetchApi(`${PREFIX}/media/${encodeURIComponent(assetId)}/edit`, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({session_id:sessionId,...options}),
+  });
+  if (options.action === "download" && response.ok) return response.blob();
+  return readApiResponse(response);
+}
 export const removeMedia = (sessionId, assetId) => request(
   `/media/${encodeURIComponent(assetId)}?session_id=${encodeURIComponent(sessionId)}`,
   { method: "DELETE" },

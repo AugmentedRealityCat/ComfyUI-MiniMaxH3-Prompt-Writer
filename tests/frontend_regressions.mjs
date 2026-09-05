@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import "./composer_geometry.mjs";
+import "./editor_geometry.mjs";
+import "./editor_interactions.mjs";
+import "./media_tools.mjs";
 
 const source = await readFile(new URL("../web/compat.js", import.meta.url), "utf8");
 const encoded = Buffer.from(source).toString("base64");
@@ -79,6 +82,7 @@ const styleModules = [
   "workbench",
   "media",
   "composer",
+  "editor",
   "settings",
   "models",
   "providers",
@@ -750,15 +754,12 @@ test("clear prompts removes brief and generated output while preserving lyrics a
   assert.match(stylesSource, /\.h3ps-clear-menu button strong \{[^}]*font-size: 1em;[^}]*letter-spacing: normal;/);
 });
 
-test("custom contact sheet counts accept only whole values from 2 through 16", () => {
+test("custom contact sheet counts accept only whole values from 2 through 24", () => {
   assert.equal(normalizeCustomFrameCount("2"), "2");
   assert.equal(normalizeCustomFrameCount(16), "16");
-  for (const value of [1, 17, 2.5, "2.5", "custom", ""]) {
+  for (const value of [1, 25, 2.5, "2.5", "custom", ""]) {
     assert.equal(normalizeCustomFrameCount(value), null);
   }
-  assert.match(mainSource, /data-frame-custom-toggle>Custom<\/button><input[^>]+min="2" max="16"[^>]+data-frame-custom-count hidden/);
-  assert.match(mainSource, /resampleCurrentVideo\(\{ frame_count: selected \}\)/);
-  assert.match(stylesSource, /\.h3ps-frame-custom-count \{[^}]*width:calc\(42px \* var\(--h3ps-interface-scale\)\);[^}]*text-align:center;/);
 });
 
 test("video drafts preserve the 8000 character brief while Music keeps 2000", () => {
@@ -889,12 +890,11 @@ test("media card overlays stay inside the thumbnail and below previews", () => {
   assert.match(stylesSource, /\.h3ps-asset:hover \.h3ps-remove-asset[^}]*opacity:\s*1;/);
   assert.doesNotMatch(stylesSource, /\.h3ps-asset:focus-within \.h3ps-(?:replace|remove)-asset/);
   assert.doesNotMatch(stylesSource, /\.h3ps-more|\.h3ps-asset-menu/);
-  assert.match(stylesSource, /\.h3ps-video-preview, \.h3ps-image-preview \{[^}]*z-index:\s*20;/);
 });
 
 test("Media Composer creates an independent Picture from prepared visual sources", () => {
-  assert.match(mainSource, /import \{ createMediaComposer \} from "\.\/media_composer\.js"/);
-  assert.match(mainSource, /"media",\s*"composer",\s*"settings"/);
+  assert.match(mainSource, /await import\("\.\/media_composer\.js"\)/);
+  assert.match(mainSource, /"media",\s*"composer",\s*"editor",\s*"settings"/);
   assert.match(mainSource, /data-open-composer[^>]*hidden/);
   assert.match(mainSource, /uploadMedia\(studio\.sessionId, "Reference", \[file\]\)/);
   assert.match(mainSource, /studio\.assets = \[\.\.\.studio\.assets, \.\.\.result\.assets\]/);
@@ -1328,22 +1328,12 @@ test("Settings owns a two-click restore for all mode draft defaults", () => {
   assert.match(stylesSource, /h3ps-draft-defaults-action/);
 });
 
-test("Reference mode exposes one contextual insert control across its three editors", () => {
-  assert.equal((mainSource.match(/data-reference-insert-toggle/g) || []).length >= 2, true);
-  assert.match(mainSource, /aria-label="Insert reference"/);
-  assert.match(mainSource, /data-reference-insert-toggle><\/button>/);
-  assert.doesNotMatch(mainSource, /data-reference-insert-toggle[^>]*>[\s\S]{0,120}<span>Insert<\/span>/);
-  assert.match(stylesSource, /assets\/icons\/insert-reference\.svg/);
-  assert.match(mainSource, /studio\.mode !== "Reference"/);
-  assert.match(mainSource, /querySelectorAll\("\[data-video-brief\], \[data-output\], \[data-refine-instruction\]"\)/);
+test("media labels insert references at the last editor caret without opening the inspector", () => {
+  assert.doesNotMatch(mainSource, /data-reference-insert-toggle|h3ps-edit-asset/);
+  assert.match(mainSource, /data-media-tag/);
   assert.match(mainSource, /insertReferenceAtCaret\(target\.editor, reference, target\.caret\)/);
   assert.match(mainSource, /\["focus", "click", "keyup", "select", "input"\]/);
-  assert.match(mainSource, /if \(!event\.target\.closest\("\[data-reference-insert\]"\)\) closeReferenceInsert\(\)/);
-  assert.match(stylesSource, /h3ps-output-panel\.is-refining \[data-refine-toggle\] \{ display: none; \}/);
-  assert.doesNotMatch(stylesSource, /h3ps-output-panel\.is-refining \.h3ps-output-actions \{ display: none; \}/);
-  for (const kind of ["subject", "image", "video", "audio"]) {
-    assert.match(stylesSource, new RegExp(`h3ps-editor-highlight mark\\.is-${kind}, \\.h3ps-reference-chip\\.is-${kind}`));
-  }
+  assert.match(mainSource, /studio.mediaEditor.open\(asset,button\)/);
 });
 
 test("Music 3 drafts and payload keep lyrics separate from H3 state", () => {
@@ -1499,7 +1489,6 @@ test("interface size is token-based, persisted, and exposed as a header slider",
   assert.match(styleSources.workbench, /\.h3ps-toggle-control \{[^}]*min-height: 28px;[^}]*font-size: 10\.5px;/);
   assert.match(styleSources.workbench, /\.h3ps-primary-button \{[^}]*height: 36px;[^}]*font-size: 10\.5px;/);
   assert.match(styleSources.workbench, /\.h3ps-section-heading strong \{ font-size: 15px; \}/);
-  assert.match(styleSources.overlays, /\.h3ps-preview-dialog header > span \{[^}]*flex-direction:column;/);
   assert.match(styleSources.shell, /\.h3ps-guide-menu \{[^}]*background: var\(--h3ps-popover\)/);
   assert.match(styleSources.shell, /\.h3ps-guide-menu a:hover \{ background: var\(--h3ps-menu-hover\); \}/);
   assert.match(styleSources.tokens, /--h3ps-toast-scale:\s*calc\(1\.25 \* var\(--h3ps-interface-scale\)\)/);
@@ -1592,4 +1581,37 @@ test("prompt refinement keeps actions above a vertically resizable editor", () =
   assert.match(mainSource, /data-refine-helper[\s\S]{0,160}data-refine-media-note/);
   assert.doesNotMatch(mainSource, /refine_height|refineHeight/);
   assert.match(stylesSource, /\.h3ps-refine\[data-refine-panel\] textarea \{[^}]*min-height: 72px;[^}]*resize: vertical;/);
+});
+
+test("refined media UI has neutral actions, no dead preview flow or reorder thumbnail ghost",()=>{
+  assert.match(mainSource,/data-actions-menu-toggle[^>]*>Actions/);
+  assert.doesNotMatch(mainSource,/h3ps-compose-button|openVideoPreview|openImagePreview|resampleCurrentVideo|h3ps-drag-ghost/);
+  assert.match(mainSource,/ghost.width = ghost.height = 1/);
+  assert.match(mainSource,/setDragImage\(ghost, 0, 0\)/);
+  assert.match(mainSource,/dismissOnWorkspaceClick:true/);
+  assert.doesNotMatch(mainSource,/toast.onclick|options.persistent/);
+  assert.match(mainSource,/!event.target.closest\("\[data-h3ps-toast\]"\)/);
+  const fields=new Map(),classes=new Set(),timers=[];
+  const toast={classList:{contains:c=>classes.has(c),add:c=>classes.add(c),toggle:(c,on)=>on?classes.add(c):classes.delete(c)},querySelector(selector){
+    if(!fields.has(selector))fields.set(selector,{querySelector:()=>({})});
+    return fields.get(selector);
+  }};
+  const studio={root:{querySelector:()=>toast}};
+  let dismissed=0;
+  const show=mainSource.slice(mainSource.indexOf('function showToast('),mainSource.indexOf('function defaultModeDraft('));
+  new Function('studio','hideToast','setTimeout','clearTimeout',show+';showToast("Trim required","Keep this notice",null,null,{dismissOnWorkspaceClick:true});')(studio,()=>dismissed++,(fn,ms)=>timers.push({fn,ms}),()=>{});
+  assert.equal(timers.length,1);assert.equal(timers[0].ms,0);timers[0].fn();
+  assert.equal(studio.toastDismissOnWorkspaceClick,true);
+  const rule=mainSource.match(/if \(studio.toastDismissOnWorkspaceClick && !event.target.closest\("\[data-h3ps-toast\]"\)\) hideToast\(\);/)[0];
+  const click=new Function('studio','event','hideToast',rule);
+  click(studio,{target:{closest:()=>toast}},()=>dismissed++);assert.equal(dismissed,0);
+  click(studio,{target:{closest:()=>null}},()=>dismissed++);assert.equal(dismissed,1);
+});
+
+test("startup generation state has no legacy preview dependency",()=>{
+  assert.doesNotMatch(mainSource,/setSheetUpdating|resampleCurrentVideo|openVideoPreview/);
+  const start=mainSource.indexOf('function setGenerationState('),end=mainSource.indexOf('function updatePromptResidency(',start);
+  const noop=()=>{},node={querySelector:()=>node,querySelectorAll:()=>[],classList:{toggle:noop},innerHTML:''};
+  const studio={root:node,mode:'Reference'};
+  new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop);
 });

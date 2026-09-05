@@ -84,9 +84,9 @@
 .h3ps-editor-highlight mark { margin: 0 -2px; padding: calc(1px * var(--h3ps-interface-scale)) calc(2px * var(--h3ps-interface-scale)); border-radius: 3px; color: transparent; pointer-events: none; }
 .h3ps-editor-highlight mark[data-prompt-reference] { pointer-events: auto; cursor: zoom-in; }
 .h3ps-editor-wrap.is-editing .h3ps-editor-highlight mark { pointer-events: none; }
-.h3ps-editor-highlight mark.is-image, .h3ps-reference-chip.is-image { background: rgba(100,156,255,.2); box-shadow: inset 0 0 0 1px rgba(100,156,255,.22); }
-.h3ps-editor-highlight mark.is-video, .h3ps-reference-chip.is-video { background: rgba(191,119,255,.2); box-shadow: inset 0 0 0 1px rgba(191,119,255,.22); }
-.h3ps-editor-highlight mark.is-audio, .h3ps-reference-chip.is-audio { background: rgba(99,212,155,.18); box-shadow: inset 0 0 0 1px rgba(99,212,155,.2); }
+.h3ps-editor-highlight mark.is-image, .h3ps-reference-chip.is-image, .h3ps-media-tag.is-image { background: rgba(100,156,255,.2); box-shadow: inset 0 0 0 1px rgba(100,156,255,.22); }
+.h3ps-editor-highlight mark.is-video, .h3ps-reference-chip.is-video, .h3ps-media-tag.is-video { background: rgba(191,119,255,.2); box-shadow: inset 0 0 0 1px rgba(191,119,255,.22); }
+.h3ps-editor-highlight mark.is-audio, .h3ps-reference-chip.is-audio, .h3ps-media-tag.is-audio { background: rgba(99,212,155,.18); box-shadow: inset 0 0 0 1px rgba(99,212,155,.2); }
 .h3ps-editor-highlight mark.is-subject, .h3ps-reference-chip.is-subject { background: rgba(255,151,102,.15); box-shadow: inset 0 0 0 1px rgba(255,151,102,.18); }
 .h3ps-editor-highlight mark.is-section { background: rgba(255,115,86,.14); box-shadow: inset 0 0 0 1px rgba(255,115,86,.17); }
 .h3ps-editor-highlight mark.is-shot { background: rgba(255,178,71,.13); box-shadow: inset 0 0 0 1px rgba(255,178,71,.13); }
@@ -169,7 +169,7 @@
 .h3ps-launcher { min-width: calc(34px * var(--h3ps-interface-scale)); padding-inline: calc(7px * var(--h3ps-interface-scale)) !important; color: var(--h3ps-accent-strong) !important; }
 .h3ps-launcher:hover { border-color: rgba(255,115,86,.6) !important; background: rgba(255,115,86,.1) !important; }.h3ps-launcher span { font-size: var(--h3ps-font-caption); font-weight: 800; letter-spacing: -.2px; }
 
-.h3ps-video-preview, .h3ps-image-preview { position:fixed; inset:0; z-index:20; display:none; }.h3ps-video-preview.is-open, .h3ps-image-preview.is-open { display:block; }.h3ps-preview-backdrop { position:absolute; inset:0; background:rgba(5,6,8,.66); backdrop-filter:blur(5px); }
+.h3ps-preview-backdrop { position:absolute; inset:0; background:rgba(5,6,8,.66); backdrop-filter:blur(5px); }
 
 /* Generate navigation and workspace */
 .h3ps-workspace-toolbar {
@@ -294,17 +294,17 @@
   box-shadow: inset 0 0 0 1px rgba(255, 151, 102, .18);
 }
 .h3ps-editor-highlight mark.is-image,
-.h3ps-reference-chip.is-image {
+.h3ps-reference-chip.is-image, .h3ps-media-tag.is-image {
   background: rgba(100, 156, 255, .2);
   box-shadow: inset 0 0 0 1px rgba(100, 156, 255, .22);
 }
 .h3ps-editor-highlight mark.is-video,
-.h3ps-reference-chip.is-video {
+.h3ps-reference-chip.is-video, .h3ps-media-tag.is-video {
   background: rgba(191, 119, 255, .2);
   box-shadow: inset 0 0 0 1px rgba(191, 119, 255, .22);
 }
 .h3ps-editor-highlight mark.is-audio,
-.h3ps-reference-chip.is-audio {
+.h3ps-reference-chip.is-audio, .h3ps-media-tag.is-audio {
   background: rgba(99, 212, 155, .18);
   box-shadow: inset 0 0 0 1px rgba(99, 212, 155, .2);
 }

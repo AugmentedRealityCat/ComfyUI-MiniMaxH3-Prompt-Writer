@@ -1,7 +1,7 @@
 import { mediaVisualDescriptor } from "./media_visual.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getGuides, getModels, getOllamaStatus, getStatus, getSystemPrompt, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, resampleMedia, unloadModel, uploadMedia } from "./api/h3studio.js";
-import { availableReferenceTags, comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isGuideMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
+import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getGuides, getModels, getOllamaStatus, getStatus, getSystemPrompt, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, unloadModel, uploadMedia } from "./api/h3studio.js";
+import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isGuideMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
 import {
   buildGeneratePayload,
@@ -18,7 +18,6 @@ import {
   loadOllamaModel,
   loadOllamaHost,
   loadUserPreferences,
-  normalizeCustomFrameCount,
   normalizeOllamaHost,
   saveApiProviderConfig,
   saveCustomSystemPrompts,
@@ -31,7 +30,9 @@ import {
   selectModelState,
 } from "./studio_state.js";
 import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff, isLocalOllamaHost, releaseComfyVramWhenIdle, unloadWriterModels } from "./vram_handoff.js";
-import { createMediaComposer } from "./media_composer.js";
+import { createLazyMediaTool } from "./media_tools.js";
+
+import { editMedia } from "./api/h3studio.js";
 
 const EXTENSION_NAME = "minimax.h3.prompt.studio";
 const LAUNCHER_SCHEMA_VERSION = "2";
@@ -44,7 +45,6 @@ const ASPECT_RATIOS = [
   ["1:1", "Square"], ["2:3", "Portrait"], ["3:2", "Landscape"], ["3:4", "Portrait"],
   ["4:3", "Landscape"], ["9:16", "Vertical"], ["16:9", "Widescreen"], ["21:9", "Ultrawide"],
 ];
-const FRAME_COUNT_PRESETS = new Set(["auto", "4", "6", "8"]);
 const MODES = {
   T2VA: {
     title: "Text to video",
@@ -349,6 +349,7 @@ const STYLE_MODULES = [
   "workbench",
   "media",
   "composer",
+  "editor",
   "settings",
   "models",
   "providers",
@@ -390,6 +391,7 @@ function icon(name, size = 16) {
     moon: '<path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z"/>',
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     download: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/>',
+    crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14M18 22V8a2 2 0 0 0-2-2H2"/>',
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--h3ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
 }
@@ -405,15 +407,15 @@ function renderAsset(asset, index) {
   const overlay = asset.type === "video" ? `<span class="h3ps-play">${icon("play", 18)}</span>` : "";
   const duration = formatDuration(asset.duration);
   return `
-    <div class="h3ps-asset" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Replace ${escapeHtml(asset.reference)}">
+    <div class="h3ps-asset" tabindex="0" role="group" aria-label="Media inspector" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Replace ${escapeHtml(asset.reference || asset.filename)}">
       <span class="h3ps-asset-preview h3ps-${asset.type}">${visual}${overlay}</span>
       <span class="h3ps-asset-copy">
-        <strong>${escapeHtml(asset.reference)}</strong>
+        <strong>${asset.reference ? `<button type="button" class="h3ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" title="Insert reference at text cursor">${escapeHtml(asset.reference || asset.filename)}</button>` : "Trim required"}</strong>
         <small>${escapeHtml(asset.filename)}</small>
       </span>
       ${duration ? `<span class="h3ps-duration">${duration}</span>` : ""}
-      <button class="h3ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Replace ${escapeHtml(asset.reference)}" aria-label="Replace ${escapeHtml(asset.reference)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
-      <button class="h3ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference)}" aria-label="Remove ${escapeHtml(asset.reference)}" ${destructiveDisabled}>${icon("close", 12)}</button>
+      <button class="h3ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Replace ${escapeHtml(asset.reference || asset.filename)}" aria-label="Replace ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
+      <button class="h3ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference || asset.filename)}" aria-label="Remove ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("close", 12)}</button>
     </div>`;
 }
 
@@ -463,6 +465,18 @@ function openMediaComposer(trigger) {
   studio.mediaComposer.open({ assets, trigger: studio.root.querySelector("[data-actions-menu-toggle]") });
 }
 
+function notifyMediaCompatibility() {
+  const pending=studio.assets.filter(a=>a.status==="needs_edit");
+  const total=studio.assets.filter(a=>a.mode==="Reference"&&a.type==="video"&&a.status!=="needs_edit").reduce((sum,a)=>sum+(a.duration||0),0);
+  const signature=pending.map(a=>a.id).join("|")+":"+(total>15);
+  if(signature===studio.mediaCompatibilityNotice)return;
+  studio.mediaCompatibilityNotice=signature;
+  const messages=[];
+  if(pending.length)messages.push("Trim the video source to 2–15 seconds and Apply to use it as a reference.");
+  if(total>15)messages.push("Reference videos exceed 15 seconds in total. Prompt generation is still available; check H3 compatibility.");
+  if(messages.length)showToast("Reference media",messages.join(" "),null,null,{dismissOnWorkspaceClick:true});
+}
+
 function renderMedia(mode) {
   if (mode === "Music3") {
     studio.root.querySelectorAll("[data-mode]").forEach((button) => button.classList.remove("is-active"));
@@ -508,9 +522,10 @@ function renderMedia(mode) {
         ${canAdd ? `<button class="${assets.length ? "h3ps-add-asset" : "h3ps-empty-drop"}" type="button" data-add-media ${studio.requestBusy ? "disabled" : ""}>${icon("plus", 18)}<span>${addLabel}</span><small>Drop files here</small></button>` : ""}
       </div>`;
   }
+  notifyMediaCompatibility();
   bindMediaActions(mode);
   syncComposerControl(mode);
-  syncReferenceInsertControl();
+
   syncModeAvailability();
 }
 
@@ -544,67 +559,19 @@ function setMusicSystemPromptExpanded(open) {
   if (!open) setMusicSystemPromptEditorOpen(false);
 }
 
-function referenceTagKind(reference) {
-  const type = reference.match(/^<(Subject|Picture|Video|Audio) /)?.[1] || "Subject";
-  return type === "Picture" ? "image" : type.toLowerCase();
-}
-
-function referenceTagsForCurrentDraft() {
-  if (!studio || studio.mode !== "Reference") return [];
-  return availableReferenceTags(studio.assets, studio.root.querySelector("[data-output]").value);
-}
-
-function closeReferenceInsert() {
-  if (!studio) return;
-  const popover = studio.root.querySelector("[data-reference-insert-popover]");
-  const toggle = studio.root.querySelector("[data-reference-insert-toggle]");
-  if (popover) popover.hidden = true;
-  if (toggle) toggle.setAttribute("aria-expanded", "false");
-}
-
-function syncReferenceInsertControl() {
-  if (!studio) return;
-  const control = studio.root.querySelector("[data-reference-insert]");
-  const toggle = studio.root.querySelector("[data-reference-insert-toggle]");
-  if (!control || !toggle) return;
-  const referenceMode = studio.mode === "Reference";
-  const tags = referenceMode ? referenceTagsForCurrentDraft() : [];
-  control.hidden = !referenceMode;
-  toggle.disabled = !tags.length || studio.requestBusy;
-  toggle.title = tags.length ? "Insert reference" : "Add reference media first";
-  if (!referenceMode || !tags.length) closeReferenceInsert();
-}
-
 function rememberReferenceInsertTarget(editor) {
-  if (studio?.mode !== "Reference" || !editor) return;
+  if (!studio || studio.mode === "Music3" || !editor) return;
   referenceInsertTarget = { editor, caret: editor.selectionStart ?? editor.value.length };
 }
 
-function toggleReferenceInsert() {
-  const popover = studio.root.querySelector("[data-reference-insert-popover]");
-  const toggle = studio.root.querySelector("[data-reference-insert-toggle]");
-  const opening = popover.hidden;
-  if (!opening) {
-    closeReferenceInsert();
-    return;
-  }
-  const tags = referenceTagsForCurrentDraft();
-  if (!tags.length) return;
-  popover.innerHTML = tags.map((reference) => `<button type="button" class="h3ps-reference-chip is-${referenceTagKind(reference)}" data-insert-reference="${escapeHtml(reference)}">${escapeHtml(reference)}</button>`).join("");
-  popover.hidden = false;
-  toggle.setAttribute("aria-expanded", "true");
-}
-
 function insertSelectedReference(reference) {
-  if (studio.mode !== "Reference") return;
+  if (studio.mode === "Music3") return;
   const fallback = studio.root.querySelector("[data-output]");
   const target = referenceInsertTarget?.editor?.isConnected ? referenceInsertTarget : { editor: fallback, caret: fallback.selectionStart };
   target.editor.setSelectionRange(target.caret, target.caret);
   if (insertReferenceAtCaret(target.editor, reference, target.caret)) {
     rememberReferenceInsertTarget(target.editor);
-    syncReferenceInsertControl();
   }
-  closeReferenceInsert();
 }
 
 function bindMediaActions(mode) {
@@ -616,10 +583,14 @@ function bindMediaActions(mode) {
     });
   });
   studio.root.querySelectorAll("[data-asset-index]").forEach((button) => {
+    button.addEventListener("keydown",event=>{
+      if(event.target===button && ["Enter"," "].includes(event.key)){event.preventDefault();button.click();}
+    });
     button.addEventListener("click", (event) => {
       if (event.target.closest("button")) return;
       const asset = studio.assets.find((item) => item.id === button.dataset.assetId);
-      previewAsset(asset);
+      if(asset.type === "image" || asset.type === "video"){if(!studio.requestBusy)studio.mediaEditor.open(asset,button);}
+      else previewAsset(asset);
     });
   });
   studio.root.querySelectorAll("[data-replace-asset]").forEach((button) => {
@@ -628,6 +599,10 @@ function bindMediaActions(mode) {
       button.blur();
       chooseMedia(mode, button.dataset.replaceAsset);
     });
+  });
+  studio.root.querySelectorAll("[data-media-tag]").forEach(button=>{
+    button.addEventListener("pointerdown",e=>e.preventDefault());
+    button.addEventListener("click",e=>{e.stopPropagation();if(!studio.requestBusy)insertSelectedReference(button.dataset.mediaTag);});
   });
   studio.root.querySelectorAll("[data-remove-asset]").forEach((button) => {
     button.addEventListener("click", async (event) => {
@@ -721,9 +696,7 @@ function bindMediaActions(mode) {
 
 function previewAsset(asset) {
   if (!asset) return;
-  if (asset.type === "video") openVideoPreview(asset);
-  else if (asset.type === "image") openImagePreview(asset);
-  else showToast(asset.reference, `${formatDuration(asset.duration)} audio reference loaded.`);
+  showToast(asset.reference, `${formatDuration(asset.duration)} audio reference loaded.`);
 }
 
 function chooseMedia(mode, replaceAssetId = null) {
@@ -748,7 +721,6 @@ async function uploadFiles(mode, files, replaceAssetId = null) {
     const result = await uploadMedia(studio.sessionId, mode, files, replaceAssetId);
     studio.sessionId = result.session_id;
     studio.assets = replaceAssetId ? result.assets : [...studio.assets, ...result.assets];
-    renderMedia(mode);
     hideToast();
     if (audioWasAdded(previousAssets, studio.assets)) {
       showToast(
@@ -759,120 +731,10 @@ async function uploadFiles(mode, files, replaceAssetId = null) {
         { durationMs: 6000 },
       );
     }
+    renderMedia(mode);
   } catch (error) {
     renderMedia(mode);
     showToast(error.code || "Upload failed", error.message, error.details);
-  }
-}
-
-function syncFrameCountControls(preview, value, { forceCustom = false } = {}) {
-  const requested = String(value || "auto");
-  const customCount = normalizeCustomFrameCount(requested);
-  const selected = FRAME_COUNT_PRESETS.has(requested) ? requested : (customCount || "auto");
-  const customSelected = forceCustom || !FRAME_COUNT_PRESETS.has(selected);
-  preview.querySelectorAll("[data-frame-count]").forEach((button) => {
-    button.classList.toggle("is-active", !forceCustom && button.dataset.frameCount === selected);
-  });
-  preview.querySelector("[data-frame-custom-toggle]").classList.toggle("is-active", customSelected);
-  const input = preview.querySelector("[data-frame-custom-count]");
-  input.hidden = !customSelected;
-  if (customSelected) input.value = selected;
-}
-
-function openVideoPreview(asset) {
-  const preview = studio.root.querySelector("[data-h3ps-preview]");
-  studio.previewAssetId = asset.id;
-  preview.querySelector("[data-preview-name]").textContent = asset.filename;
-  const video = preview.querySelector("[data-preview-video]");
-  video.src = asset.content_url;
-  preview.querySelector("[data-preview-sheet]").src = asset.contact_sheet_url || "";
-  syncFrameCountControls(preview, asset.frame_count_mode || "auto");
-  preview.querySelector("[data-include-endpoints]").checked = asset.include_endpoints !== false;
-  preview.querySelector("[data-preview-sampling]").textContent = `One sheet · ${asset.frames.length} frames · read left to right`;
-  preview.classList.add("is-open");
-  preview.classList.remove("is-updating");
-  preview.setAttribute("aria-hidden", "false");
-}
-
-function closeVideoPreview() {
-  const preview = studio.root.querySelector("[data-h3ps-preview]");
-  preview.classList.remove("is-open");
-  preview.setAttribute("aria-hidden", "true");
-  preview.querySelector("[data-preview-video]").pause();
-}
-
-function openImagePreview(asset) {
-  const preview = studio.root.querySelector("[data-h3ps-image-preview]");
-  preview.querySelector("[data-image-preview-reference]").textContent = asset.reference || "Picture reference";
-  preview.querySelector("[data-image-preview-name]").textContent = asset.filename;
-  const image = preview.querySelector("[data-image-preview-image]");
-  const dialog = preview.querySelector(".h3ps-image-preview-dialog");
-  image.onload = () => {
-    const aspect = image.naturalWidth / image.naturalHeight || 1;
-    const maxStageWidth = Math.max(260, Math.min(1200, window.innerWidth - 88));
-    const maxStageHeight = Math.max(260, Math.min(900, window.innerHeight - 146));
-    let stageWidth = maxStageWidth;
-    let stageHeight = stageWidth / aspect;
-    if (stageHeight > maxStageHeight) {
-      stageHeight = maxStageHeight;
-      stageWidth = stageHeight * aspect;
-    }
-    dialog.style.setProperty("--h3ps-image-preview-width", `${Math.round(stageWidth + 28)}px`);
-    dialog.style.setProperty("--h3ps-image-preview-height", `${Math.round(stageHeight + 86)}px`);
-  };
-  image.alt = asset.filename;
-  image.src = asset.content_url || asset.preview_url;
-  preview.classList.add("is-open");
-  preview.setAttribute("aria-hidden", "false");
-}
-
-function closeImagePreview() {
-  const preview = studio.root.querySelector("[data-h3ps-image-preview]");
-  preview.classList.remove("is-open");
-  preview.setAttribute("aria-hidden", "true");
-  const image = preview.querySelector("[data-image-preview-image]");
-  image.onload = null;
-  image.removeAttribute("src");
-}
-
-function setSheetUpdating(updating) {
-  const preview = studio.root.querySelector("[data-h3ps-preview]");
-  preview.classList.toggle("is-updating", updating);
-  preview.querySelectorAll("[data-frame-count], [data-frame-custom-toggle], [data-frame-custom-count], [data-include-endpoints], [data-resample]").forEach((control) => {
-    control.disabled = updating || studio.requestBusy;
-  });
-}
-
-async function resampleCurrentVideo(options = null) {
-  const asset = studio.assets.find((item) => item.id === studio.previewAssetId);
-  if (!asset) return;
-  const preview = studio.root.querySelector("[data-h3ps-preview]");
-  const customInput = preview.querySelector("[data-frame-custom-count]");
-  const customSelected = preview.querySelector("[data-frame-custom-toggle]").classList.contains("is-active");
-  const customCount = customSelected ? normalizeCustomFrameCount(customInput.value) : null;
-  if (!options?.frame_count && customSelected && !customCount) {
-    customInput.setCustomValidity("Enter a whole number from 2 to 16.");
-    customInput.reportValidity();
-    return;
-  }
-  const selectedCount = options?.frame_count || customCount || preview.querySelector("[data-frame-count].is-active")?.dataset.frameCount || asset.frame_count_mode || "auto";
-  const includeEndpoints = options?.include_endpoints ?? preview.querySelector("[data-include-endpoints]").checked;
-  syncFrameCountControls(preview, selectedCount);
-  setSheetUpdating(true);
-  try {
-    const result = await resampleMedia(studio.sessionId, asset.id, {
-      frame_count: selectedCount,
-      include_endpoints: includeEndpoints,
-    });
-    Object.assign(asset, result.asset);
-    openVideoPreview(asset);
-    renderMedia(studio.mode);
-    showToast("Contact sheet updated", `The model will use ${asset.frames.length} uniformly sampled frames.`);
-  } catch (error) {
-    openVideoPreview(asset);
-    showToast(error.code || "Resample failed", error.message, error.details);
-  } finally {
-    setSheetUpdating(false);
   }
 }
 
@@ -956,12 +818,12 @@ function clearCurrentPrompts({ notify = true } = {}) {
   studio.refineRestore = null;
   studio.root.querySelector("[data-refine-restore]").hidden = true;
   toggleRefine(false);
-  closeReferenceInsert();
+
   studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = promptLengthMeta(output.value);
   updateBriefLayout();
   renderPromptHighlights();
   syncModifiedState();
-  syncReferenceInsertControl();
+
   saveCurrentModeDraft();
   if (notify) {
     const detail = studio.mode === "Music3"
@@ -977,8 +839,8 @@ async function clearCurrentMedia({ notify = true } = {}) {
   try {
     const result = await clearMedia(studio.sessionId, studio.mode);
     studio.assets = result.assets;
-    closeVideoPreview();
-    closeImagePreview();
+
+
     renderMedia(studio.mode);
     if (notify) showToast("Media cleared", "The temporary session files were removed.");
     return true;
@@ -1073,9 +935,9 @@ function syncWorkspace() {
   studio.root.querySelector("[data-refine-instruction]").placeholder = music
     ? "For example: keep the verses sparse and let the final chorus open wider."
     : "For example: make the camera movement slower and keep the ending more ambiguous.";
-  if (studio.mode === "Reference") rememberReferenceInsertTarget(studio.root.querySelector("[data-output]"));
+  if (studio.mode !== "Music3") rememberReferenceInsertTarget(studio.root.querySelector("[data-output]"));
   else referenceInsertTarget = null;
-  syncReferenceInsertControl();
+
   if (music) {
     syncSystemPromptEditor("music3");
     syncSystemPromptEditor("music3_lyrics");
@@ -1168,6 +1030,7 @@ function setGenerationState(state, label, detail) {
   const status = studio.root.querySelector("[data-status]");
   const statusDetail = studio.root.querySelector("[data-status-detail]");
   const busy = state === "busy";
+  const wasBusy = studio.requestBusy;
   studio.requestBusy = busy;
   syncModeAvailability();
   studio.root.querySelectorAll("[data-clear-media], [data-clear-menu-toggle], [data-actions-menu-toggle], [data-clear-action]").forEach((control) => { control.disabled = busy; });
@@ -1179,9 +1042,8 @@ function setGenerationState(state, label, detail) {
     ? "Available after the active Writer request finishes"
     : "Unload models held by ComfyUI without clearing cached workflow results";
   button.classList.toggle("is-cancel", busy);
-  button.innerHTML = busy ? `<span class="h3ps-spinner"></span>Cancel` : `${icon("spark", 16)}<span data-generate-label>${studio.mode === "Music3" ? "Generate caption" : "Generate prompt"}</span>`;
+  if (!busy || !wasBusy) button.innerHTML = busy ? `<span class="h3ps-spinner"></span>Cancel` : `${icon("spark", 16)}<span data-generate-label>${studio.mode === "Music3" ? "Generate caption" : "Generate prompt"}</span>`;
   renderMedia(studio.mode);
-  setSheetUpdating(false);
   syncLifecycleActions();
   status.hidden = !busy;
   status.classList.toggle("is-busy", busy);
@@ -3121,10 +2983,6 @@ function createStudio() {
           <div class="h3ps-output-actions">
             <span class="h3ps-output-primary-actions">
               <button class="h3ps-secondary-button" type="button" title="Refine with local LLM" data-refine-toggle>${icon("spark", 15)} Refine</button>
-              <span class="h3ps-reference-insert" data-reference-insert hidden>
-                <button class="h3ps-reference-insert-toggle" type="button" title="Insert reference" aria-label="Insert reference" aria-expanded="false" data-reference-insert-toggle></button>
-                <span class="h3ps-reference-insert-popover" data-reference-insert-popover hidden></span>
-              </span>
             </span>
             <button class="h3ps-secondary-button" type="button" data-copy>${icon("copy", 15)} <span data-copy-label>Copy prompt</span></button>
           </div>
@@ -3154,42 +3012,50 @@ function createStudio() {
       <div class="h3ps-other-models-catalog" data-other-models-catalog></div>
     </section>
 
-    <section class="h3ps-video-preview" data-h3ps-preview aria-hidden="true">
-      <div class="h3ps-preview-backdrop" data-close-preview></div>
-      <div class="h3ps-preview-dialog">
-        <header><span><small>Video reference</small><strong data-preview-name>camera_motion.mp4</strong></span><button class="h3ps-icon-button" type="button" data-close-preview>${icon("close", 18)}</button></header>
-        <div class="h3ps-video-stage"><video controls preload="metadata" data-preview-video></video></div>
-        <div class="h3ps-sample-heading"><span><small>What the model sees</small><strong>Contact sheet</strong></span><div class="h3ps-sample-controls"><div class="h3ps-frame-count"><span>Frames</span><button type="button" data-frame-count="auto">Auto</button><button type="button" data-frame-count="4">4</button><button type="button" data-frame-count="6">6</button><button type="button" data-frame-count="8">8</button><button type="button" data-frame-custom-toggle>Custom</button><input class="h3ps-frame-custom-count" type="number" min="2" max="16" step="1" inputmode="numeric" aria-label="Custom frame count" data-frame-custom-count hidden></div><label class="h3ps-endpoints"><input type="checkbox" data-include-endpoints checked>First & last</label><button type="button" data-resample>${icon("refresh", 14)} Resample</button></div></div>
-        <div class="h3ps-contact-sheet"><img data-preview-sheet alt="Contact sheet sent to the local model"><span class="h3ps-sheet-updating"><i class="h3ps-spinner"></i>Updating…</span></div>
-        <footer><span>${icon("check", 13)} Use for local analysis</span><small data-preview-sampling></small></footer>
-      </div>
-    </section>
-
-    <section class="h3ps-image-preview" data-h3ps-image-preview aria-hidden="true">
-      <div class="h3ps-preview-backdrop" data-close-image-preview></div>
-      <div class="h3ps-image-preview-dialog">
-        <header><span><small data-image-preview-reference>Picture reference</small><strong data-image-preview-name></strong></span><button class="h3ps-icon-button" type="button" data-close-image-preview>${icon("close", 18)}</button></header>
-        <div class="h3ps-image-preview-stage"><img data-image-preview-image alt=""></div>
-      </div>
-    </section>
-
     <div class="h3ps-toast" role="status" aria-live="polite" aria-atomic="true" data-h3ps-toast><span class="h3ps-toast-icon">${icon("info", 17)}</span><span><strong data-toast-title>Notice</strong><span data-toast-message></span><button type="button" class="h3ps-toast-action" data-toast-action hidden></button><details data-toast-details hidden><summary>Technical details</summary><pre></pre></details></span></div>`;
   document.body.appendChild(root);
 
   studio = { root, ...createStudioState({ sessionId: createSessionId(), storage: localStorage }) };
-  studio.mediaComposer = createMediaComposer({
-    root,
-    icon,
-    onAddPicture: addComposedPicture,
-    getAddState: composerAddState,
-    notify: (kind, message) => showToast(kind === "error" ? "Composer failed" : "Media Composer", message),
-    onOpenChange: (open) => {
-      const modal = root.querySelector(".h3ps-modal");
-      modal.inert = open;
-      if (open) modal.removeAttribute("aria-modal");
-      else if (root.classList.contains("is-open")) modal.setAttribute("aria-modal", "true");
-    },
-  });
+  const onMediaToolOpenChange = (open) => {
+    const modal = root.querySelector(".h3ps-modal");
+    modal.inert = open;
+    if (open) modal.removeAttribute("aria-modal");
+    else if (root.classList.contains("is-open")) modal.setAttribute("aria-modal", "true");
+  };
+  const mediaToolUnavailable = (message) => showToast("Media tool unavailable", message);
+  studio.mediaComposer = createLazyMediaTool(root, async () => {
+    const { createMediaComposer } = await import("./media_composer.js");
+    return createMediaComposer({
+      root,
+      icon,
+      onAddPicture: addComposedPicture,
+      getAddState: composerAddState,
+      notify: (kind, message) => showToast(kind === "error" ? "Composer failed" : "Media Composer", message),
+      onOpenChange: onMediaToolOpenChange,
+    });
+  }, mediaToolUnavailable);
+  studio.mediaEditor = createLazyMediaTool(root, async () => {
+    const { createMediaEditor } = await import("./media_editor.js");
+    return createMediaEditor({
+      root,
+      icon,
+      onAddFrame: async (blob, filename) => {
+        const file = new File([blob], filename, { type: "image/png" });
+        const result = await uploadMedia(studio.sessionId, "Reference", [file]);
+        studio.assets.push(...result.assets);
+        showToast("Picture added", result.assets[0].reference);
+        renderMedia(studio.mode);
+      },
+      request: (assetId, options) => editMedia(studio.sessionId, assetId, options),
+      onSaved: (result) => {
+        studio.assets = result.assets;
+        showToast("Media applied", "Crop and trim applied. The original source is preserved.");
+        renderMedia(studio.mode);
+      },
+      notify: (message) => showToast("Media Editor", message),
+      onOpenChange: onMediaToolOpenChange,
+    });
+  }, mediaToolUnavailable);
   root.querySelector("[data-lyrics-use-brief]").checked = studio.musicLyricsUseBrief;
   const durationSlider = root.querySelector("[data-duration-slider]");
   durationSlider.value = String(studio.durationSeconds);
@@ -3232,11 +3098,8 @@ function createStudio() {
     if (!event.target.closest("[data-model-files-toggle], [data-model-files-menu]")) {
       root.querySelectorAll("[data-model-files-menu]").forEach((menu) => { menu.hidden = true; });
     }
-    if (!event.target.closest("[data-reference-insert]")) closeReferenceInsert();
     if (!event.target.closest("[data-clear-control]")) setClearMenuOpen(false);
   });
-  root.querySelectorAll("[data-close-preview]").forEach((el) => el.addEventListener("click", closeVideoPreview));
-  root.querySelectorAll("[data-close-image-preview]").forEach((el) => el.addEventListener("click", closeImagePreview));
   root.querySelectorAll("[data-workspace]").forEach((button) => button.addEventListener("click", () => {
     const nextMode = button.dataset.workspace === "music" ? "Music3" : studio.lastVideoMode;
     if (!isGenerationModeAvailable(studio.selectedModel, nextMode)) return;
@@ -3571,13 +3434,6 @@ function createStudio() {
       "The AI Lyrics change was discarded.",
     );
   });
-  root.querySelector("[data-reference-insert-toggle]").addEventListener("pointerdown", (event) => event.preventDefault());
-  root.querySelector("[data-reference-insert-toggle]").addEventListener("click", toggleReferenceInsert);
-  root.querySelector("[data-reference-insert-popover]").addEventListener("pointerdown", (event) => event.preventDefault());
-  root.querySelector("[data-reference-insert-popover]").addEventListener("click", (event) => {
-    const option = event.target.closest("[data-insert-reference]");
-    if (option) insertSelectedReference(option.dataset.insertReference);
-  });
   root.querySelector("[data-refine-restore]").addEventListener("click", () => {
     if (studio.refineRestore == null) return;
     const output = root.querySelector("[data-output]");
@@ -3615,7 +3471,7 @@ function createStudio() {
     renderPromptHighlights();
     syncOutputLengthMeta();
     saveCurrentModeDraft();
-    syncReferenceInsertControl();
+
   });
   root.querySelector("[data-output]").addEventListener("scroll", renderPromptHighlights);
   const editor = root.querySelector("[data-output]");
@@ -3650,44 +3506,6 @@ function createStudio() {
     if (event.target.closest("[data-prompt-reference]")) peek.hidden = true;
   });
   root.querySelector("[data-prompt-highlights]").addEventListener("click", () => editor.focus());
-  root.querySelector("[data-resample]").addEventListener("click", () => resampleCurrentVideo());
-  root.querySelectorAll("[data-frame-count]").forEach((button) => button.addEventListener("click", () => {
-    const asset = studio.assets.find((item) => item.id === studio.previewAssetId);
-    if (!asset || button.dataset.frameCount === (asset.frame_count_mode || "auto")) return;
-    resampleCurrentVideo({ frame_count: button.dataset.frameCount });
-  }));
-  root.querySelector("[data-frame-custom-toggle]").addEventListener("click", () => {
-    const preview = root.querySelector("[data-h3ps-preview]");
-    const asset = studio.assets.find((item) => item.id === studio.previewAssetId);
-    if (!asset) return;
-    const input = preview.querySelector("[data-frame-custom-count]");
-    const current = normalizeCustomFrameCount(asset.frame_count_mode);
-    const fallback = normalizeCustomFrameCount(asset.frame_count || asset.frames?.length) || "6";
-    syncFrameCountControls(preview, current || fallback, { forceCustom: true });
-    input.focus();
-    input.select();
-  });
-  const customFrameCount = root.querySelector("[data-frame-custom-count]");
-  customFrameCount.addEventListener("input", () => customFrameCount.setCustomValidity(""));
-  customFrameCount.addEventListener("change", () => {
-    const selected = normalizeCustomFrameCount(customFrameCount.value);
-    if (!selected) {
-      customFrameCount.setCustomValidity("Enter a whole number from 2 to 16.");
-      customFrameCount.reportValidity();
-      return;
-    }
-    customFrameCount.setCustomValidity("");
-    const asset = studio.assets.find((item) => item.id === studio.previewAssetId);
-    if (!asset) return;
-    if (selected === String(asset.frame_count_mode || "auto")) {
-      syncFrameCountControls(root.querySelector("[data-h3ps-preview]"), selected);
-      return;
-    }
-    resampleCurrentVideo({ frame_count: selected });
-  });
-  root.querySelector("[data-include-endpoints]").addEventListener("change", (event) => {
-    resampleCurrentVideo({ include_endpoints: event.target.checked });
-  });
   syncWorkspace();
   restoreModeDraft(studio.mode);
   renderMedia(studio.mode);
@@ -3720,10 +3538,11 @@ function closeStudio() {
   if (!studio) return;
   const modal = studio.root.querySelector(".h3ps-modal");
   studio.mediaComposer?.close();
+  if (studio.mediaEditor?.close() === false) return;
   setSettingsOpen(false);
   setOtherModelsPopover(false);
-  closeVideoPreview();
-  closeImagePreview();
+
+
   modal.removeAttribute("aria-modal");
   modal.hidden = true;
   studio.root.classList.remove("is-open");
@@ -3827,9 +3646,10 @@ function installLauncher() {
 document.addEventListener("keydown", (event) => {
   if (!studio?.root.classList.contains("is-open")) return;
   const openComposer = studio.root.querySelector(".h3ps-composer.is-open");
+  const openEditor = studio.root.querySelector(".h3ps-media-editor.is-open");
   if (event.key === "Tab") {
     const openPopover = studio.root.querySelector("[data-other-models-popover]:not([hidden])");
-    const focusScope = openComposer?.querySelector(".h3ps-cmp-dialog") || openPopover || studio.root.querySelector(".h3ps-modal");
+    const focusScope = openEditor?.querySelector(".h3ps-ed-dialog") || openComposer?.querySelector(".h3ps-cmp-dialog") || openPopover || studio.root.querySelector(".h3ps-modal");
     const focusable = Array.from(focusScope.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
       .filter((element) => element.getClientRects().length && !element.closest("[hidden]"));
     if (focusable.length) {
@@ -3844,7 +3664,7 @@ document.addEventListener("keydown", (event) => {
       }
     }
   }
-  if (openComposer) return;
+  if (openComposer || openEditor) return;
   if (event.key === "Escape") {
     event.preventDefault();
     if (!studio.root.querySelector("[data-clear-menu]").hidden) {
@@ -3855,7 +3675,6 @@ document.addEventListener("keydown", (event) => {
     const interfaceSizeMenu = studio.root.querySelector("[data-interface-size-menu]");
     const choiceMenu = Array.from(studio.root.querySelectorAll("[data-choice-menu]")).find((menu) => !menu.hidden);
     const runtimeMenu = Array.from(studio.root.querySelectorAll("[data-runtime-menu]")).find((menu) => !menu.hidden);
-    const referenceMenu = studio.root.querySelector("[data-reference-insert-popover]");
     if (!interfaceSizeMenu.hidden) {
       setInterfaceSizeMenuOpen(false, true);
     } else if (!guideMenu.hidden) {
@@ -3869,10 +3688,7 @@ document.addEventListener("keydown", (event) => {
       toggle?.setAttribute("aria-expanded", "false");
       toggle?.focus();
     } else if (runtimeMenu) setRuntimeMenuOpen(runtimeMenu.dataset.runtimeMenu, false, true);
-    else if (!referenceMenu.hidden) closeReferenceInsert();
     else if (!studio.root.querySelector("[data-other-models-popover]").hidden) setOtherModelsPopover(false);
-    else if (studio.root.querySelector("[data-h3ps-image-preview]").classList.contains("is-open")) closeImagePreview();
-    else if (studio.root.querySelector("[data-h3ps-preview]").classList.contains("is-open")) closeVideoPreview();
     else if (studio.fullscreen) setFullscreen(false);
     else closeStudio();
   }

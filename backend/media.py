@@ -147,6 +147,7 @@ class MediaStore:
         result = {key: value for key, value in asset.items() if not key.startswith("_")}
         result["content_url"] = f"/h3studio/media/{asset['id']}/content?session_id={asset['session_id']}"
         content_revision = asset.get("content_revision", asset.get("sample_index", 0))
+        result["source_url"] = f"{result['content_url']}&kind=source&revision={asset.get('_source_revision', 0)}"
         if asset.get("_preview_path"):
             result["preview_url"] = f"{result['content_url']}&kind=preview&revision={content_revision}"
         if asset.get("_prepared_path"):
@@ -160,6 +161,7 @@ class MediaStore:
             }
             for index, frame in enumerate(asset.get("_frames", []))
         ]
+        result["content_url"] += f"&revision={content_revision}"
         return result
 
     def add(self, session_id: str, mode: str, filename: str, content_type: str | None, stored_path: Path) -> dict[str, Any]:
@@ -184,9 +186,13 @@ class MediaStore:
     def commit_add(self, session_id: str, mode: str, base: dict[str, Any]) -> dict[str, Any]:
         assets = self.assets(session_id)
         validate_capacity(mode, assets, base["type"])
-        validate_reference_durations(assets, base)
+        if base.get("status") != "needs_edit":
+            validate_reference_durations(assets, base)
         assets.append(base)
-        self._renumber(assets, mode)
+        if mode == "Reference":
+            self._assign_reference_identity(assets, base)
+        else:
+            self._renumber(assets, mode)
         return self.public(base)
 
     def _prepare_asset(
@@ -223,7 +229,11 @@ class MediaStore:
                 base.update(process_video(stored_path, stored_path.parent))
             else:
                 base.update(process_audio(stored_path))
-            validate_reference_durations(assets, base)
+            base["source"] = {key: base.get(key) for key in ("width", "height", "duration", "has_audio", "fps")}
+            if kind == "video" and mode == "Reference" and not (2 <= (base.get("duration") or 0) <= REFERENCE_DURATION_TOLERANCE_SECONDS):
+                base["status"] = "needs_edit"
+            else:
+                validate_reference_durations(assets, base)
         except MediaError:
             raise
         except Exception as exc:
@@ -272,12 +282,19 @@ class MediaStore:
             raise MediaError("INVALID_REPLACEMENT", "The prepared replacement no longer matches the selected asset.")
         remaining = [asset for asset in assets if asset is not old_asset]
         validate_capacity(old_asset["mode"], remaining, replacement["type"])
-        validate_reference_durations(remaining, replacement)
+        if replacement.get("status") != "needs_edit":
+            validate_reference_durations(remaining, replacement)
         index = assets.index(old_asset)
         replacement["id"] = old_asset["id"]
         replacement["content_revision"] = int(old_asset.get("content_revision", 0)) + 1
+        replacement["_source_revision"] = replacement["content_revision"]
         assets[index] = replacement
-        self._renumber(assets, old_asset["mode"])
+        if old_asset["mode"] == "Reference" and replacement["type"] == old_asset["type"]:
+            replacement["reference"] = old_asset.get("reference")
+            replacement["_reference_reservation"] = old_asset.get("_reference_reservation")
+            self._assign_reference_identity(assets, replacement)
+        else:
+            self._renumber(assets, old_asset["mode"])
         shutil.rmtree(Path(old_asset["_original_path"]).parent, ignore_errors=True)
         return self.public(replacement)
 
@@ -366,13 +383,17 @@ class MediaStore:
         derived_dir = asset_dir / f"derived_{uuid4()}"
         derived_dir.mkdir(parents=False, exist_ok=False)
         try:
+            edit = asset.get("edit") or {}
             processed = process_video(
                 Path(asset["_original_path"]),
                 derived_dir,
                 frame_count_mode=selected_count,
                 include_endpoints=selected_endpoints,
                 sample_index=sample_index,
+                **{key: edit[key] for key in ("crop", "start", "end") if key in edit},
             )
+            if asset.get("_edited_path"):
+                processed.update({key: asset[key] for key in ("duration", "fps", "has_audio") if key in asset})
         except MediaError:
             shutil.rmtree(derived_dir, ignore_errors=True)
             raise
@@ -411,7 +432,7 @@ class MediaStore:
             if path != Path(asset["_original_path"]):
                 path.unlink(missing_ok=True)
         for parent in {path.parent for path in old_paths}:
-            if parent != asset_dir and parent.exists():
+            if parent != asset_dir and parent.exists() and parent != Path(asset.get("_edited_path") or asset["_original_path"]).parent:
                 shutil.rmtree(parent, ignore_errors=True)
         return self.public(asset)
 
@@ -429,7 +450,7 @@ class MediaStore:
     def manifest(self, session_id: str, mode: str) -> dict[str, Any]:
         if session_id in self.sessions:
             self.touch(session_id)
-        assets = [asset for asset in self.sessions.get(session_id, []) if asset["mode"] == mode]
+        assets = [asset for asset in self.sessions.get(session_id, []) if asset["mode"] == mode and asset.get("status") != "needs_edit"]
         violations: list[dict[str, str]] = []
         if mode == "Reference":
             types = {asset["type"] for asset in assets}
@@ -445,12 +466,40 @@ class MediaStore:
             "counts": {kind: len([asset for asset in assets if asset["type"] == kind]) for kind in ("image", "video", "audio")},
             "violations": violations,
             "valid": not violations,
+            "warnings": [{"code": "REFERENCE_VIDEO_TOTAL", "message": "Reference videos exceed 15 seconds in total."}]
+            if mode == "Reference" and sum(asset.get("duration", 0) or 0 for asset in assets if asset["type"] == "video") > 15 else [],
         }
 
     @staticmethod
+    def _assign_reference_identity(assets: list[dict[str, Any]], asset: dict[str, Any]) -> None:
+        if asset.get("status") == "needs_edit":
+            asset["_reference_reservation"] = asset.get("reference") or asset.get("_reference_reservation")
+            asset["reference"] = None
+            return
+        if asset.get("reference"):
+            return
+        name = {"image": "Picture", "video": "Video", "audio": "Audio"}[asset["type"]]
+        used = {item.get("reference") or item.get("_reference_reservation") for item in assets if item is not asset and item["mode"] == "Reference"}
+        reserved = asset.get("_reference_reservation")
+        if reserved and reserved not in used:
+            asset["reference"] = reserved
+            return
+        number = 1
+        while f"<{name} {number}>" in used:
+            number += 1
+        asset["reference"] = f"<{name} {number}>"
+
+    @staticmethod
     def _renumber(assets: list[dict[str, Any]], mode: str) -> None:
+        if mode == "Reference":
+            for asset in [item for item in assets if item["mode"] == mode]:
+                MediaStore._assign_reference_identity(assets, asset)
+            return
         per_type = {"image": 0, "video": 0, "audio": 0}
         for asset in [item for item in assets if item["mode"] == mode]:
+            if asset.get("status") == "needs_edit":
+                asset["reference"] = None
+                continue
             per_type[asset["type"]] += 1
             if mode == "Reference":
                 names = {"image": "Picture", "video": "Video", "audio": "Audio"}
@@ -498,6 +547,7 @@ def _av_metadata(source: Path) -> dict[str, Any]:
             "width": video.width if video else None,
             "height": video.height if video else None,
             "has_audio": audio is not None,
+            "fps": float(video.average_rate) if video and video.average_rate else None,
             "sample_rate": audio.rate if audio else None,
             "channels": audio.codec_context.channels if audio else None,
         }
@@ -507,15 +557,15 @@ def _normalize_frame_count_mode(value: Any) -> str:
     if value == "auto":
         return "auto"
     if isinstance(value, bool):
-        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 16.")
+        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 24.")
     if isinstance(value, int):
         count = value
     elif isinstance(value, str) and value.strip().isdigit():
         count = int(value.strip())
     else:
-        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 16.")
-    if count < 2 or count > 16:
-        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 16.")
+        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 24.")
+    if count < 2 or count > 24:
+        raise MediaError("INVALID_SAMPLE_COUNT", "Frame count must be Auto or a whole number from 2 to 24.")
     return str(count)
 
 
@@ -531,10 +581,13 @@ def process_video(
     frame_count_mode: str = "auto",
     include_endpoints: bool = True,
     sample_index: int = 0,
+    crop: dict[str, int] | None = None,
+    start: float = 0,
+    end: float | None = None,
 ) -> dict[str, Any]:
     frame_count_mode = _normalize_frame_count_mode(frame_count_mode)
     metadata = _av_metadata(source)
-    duration = metadata["duration"]
+    duration = (end if end is not None else metadata["duration"]) - start if metadata["duration"] else None
     if not duration or duration <= 0:
         raise MediaError("MEDIA_DECODE_FAILED", "Video duration could not be determined.")
     count = _selected_frame_count(frame_count_mode)
@@ -557,7 +610,9 @@ def process_video(
         if video is None or video.time_base is None:
             raise MediaError("MEDIA_DECODE_FAILED", "Video stream metadata could not be determined.")
         for index, timestamp in enumerate(times):
-            target_pts = max(0, int(timestamp / float(video.time_base)))
+            origin = float((video.start_time or 0) * video.time_base)
+            target_time = origin + start + timestamp
+            target_pts = max(0, int(target_time / float(video.time_base)))
             container.seek(target_pts, stream=video, backward=True, any_frame=False)
             selected = None
             for decoded in container.decode(video):
@@ -565,11 +620,13 @@ def process_video(
                 frame_time = decoded.time
                 if frame_time is None and decoded.pts is not None:
                     frame_time = float(decoded.pts * video.time_base)
-                if frame_time is not None and frame_time >= timestamp:
+                if frame_time is not None and frame_time >= target_time:
                     break
             if selected is None:
                 continue
             image = selected.to_image().convert("RGB")
+            if crop:
+                image = image.crop((crop["x"], crop["y"], crop["x"]+crop["w"], crop["y"]+crop["h"]))
             image.thumbnail((768, 768), Image.Resampling.LANCZOS)
             frame_path = target_dir / f"frame_{index:02d}.jpg"
             image.save(frame_path, "JPEG", quality=88, optimize=True)
@@ -588,6 +645,9 @@ def process_video(
     metadata["frame_count"] = count
     metadata["include_endpoints"] = include_endpoints
     metadata["sample_index"] = sample_index
+    metadata["duration"] = round(duration, 3)
+    if crop:
+        metadata["width"], metadata["height"] = crop["w"], crop["h"]
     return metadata
 
 

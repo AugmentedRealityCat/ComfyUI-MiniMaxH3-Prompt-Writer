@@ -873,6 +873,35 @@ class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
         commit_resample.assert_not_called()
         self.assertFalse(routes.STATE["media_mutation_active"])
 
+    async def test_cancelled_editor_save_discards_output_without_committing(self):
+        started, release = threading.Event(), threading.Event()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "edit"
+            def prepare(*_args):
+                directory.mkdir()
+                started.set()
+                release.wait(timeout=5)
+                return {"directory": directory}
+            with patch.object(routes.STORE,"get",return_value={"mode":"Reference"}), patch.object(routes,"prepare_edit",side_effect=prepare), patch.object(routes,"commit_edit") as commit:
+                task=asyncio.create_task(routes.edit_media(_Request(match_info={"asset_id":"video"},body={"session_id":self.session_id,"action":"save"})))
+                self.assertTrue(await asyncio.to_thread(started.wait,2))
+                task.cancel()
+                await asyncio.sleep(0)
+                self.assertTrue(routes.STATE["media_mutation_active"])
+                self.assertIsNone(routes._claim_generation_request())
+                release.set()
+                with self.assertRaises(asyncio.CancelledError):await task
+                commit.assert_not_called()
+            self.assertFalse(directory.exists())
+        self.assertFalse(routes.STATE["media_mutation_active"])
+
+    async def test_editor_preview_never_commits_or_invalidates_generation(self):
+        with patch.object(routes.STORE,"get",return_value={"mode":"Reference"}), patch.object(routes,"prepare_edit",return_value={"image":"data:image/jpeg;base64,AA=="}), patch.object(routes,"commit_edit") as commit, patch.object(routes,"_invalidate_generation_cache") as invalidate:
+            response=await routes.edit_media(_Request(match_info={"asset_id":"video"},body={"session_id":self.session_id,"action":"preview"}))
+        self.assertEqual(response.status,200)
+        commit.assert_not_called();invalidate.assert_not_called()
+        self.assertFalse(routes.STATE["media_mutation_active"])
+
     async def test_generate_success_caches_only_task_context_and_always_returns_to_idle(self):
         body = self.generation_body("Use <Video 1>.")
         assembled = {"input": {"duration_seconds": 10, "aspect_ratio": "16:9", "creative_brief": body["creative_brief"]}}

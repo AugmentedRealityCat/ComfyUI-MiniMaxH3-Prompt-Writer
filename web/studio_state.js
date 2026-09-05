@@ -55,7 +55,7 @@ export function clearPromptDraft(draft = {}) {
 
 export function normalizeCustomFrameCount(value) {
   const count = Number(value);
-  return Number.isInteger(count) && count >= 2 && count <= 16 ? String(count) : null;
+  return Number.isInteger(count) && count >= 2 && count <= 24 ? String(count) : null;
 }
 
 export function loadModeDrafts(storage = globalThis.localStorage) {
@@ -465,7 +465,6 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     generationDotCount: 0,
     sessionId,
     assets: [],
-    previewAssetId: null,
     audioSupported: false,
     models: [],
     modelSetup: [],

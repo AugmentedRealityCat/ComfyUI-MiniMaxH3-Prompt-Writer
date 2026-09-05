@@ -97,7 +97,7 @@ Include a transcript when exact speech or lyrics matter. Writer preserves user-s
 
 ## Images and video
 
-Images are sent to the selected multimodal model in reference order. Reordering media renumbers tags within each type.
+Images are sent to the selected multimodal model in reference order. Reordering Reference media preserves each asset’s assigned tag. A temporarily ineligible asset reserves its tag until it becomes eligible again.
 
 In Reference mode, select **Replace** on an asset card or drop one new file on the card. The new file keeps the same position in the list. It can be a different media type, so check any Picture, Video, or Audio tags in your brief after replacing it. Dropping several files on a card adds them to the end of the list instead.
 

@@ -129,7 +129,7 @@ class MediaTransactionTests(unittest.TestCase):
             self.assertEqual(result["type"], "audio")
             self.assertEqual(result["reference"], "<Audio 1>")
             self.assertEqual([asset["id"] for asset in store.sessions["session"]], ["first", "replace-me", "third"])
-            self.assertEqual([asset["reference"] for asset in store.sessions["session"]], ["<Picture 1>", "<Audio 1>", "<Picture 2>"])
+            self.assertEqual([asset["reference"] for asset in store.sessions["session"]], ["<Picture 1>", "<Audio 1>", "<Picture 3>"])
 
     def test_failed_resample_preserves_old_derived_media_and_revision(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -25,9 +25,10 @@ class MediaResampleTests(unittest.TestCase):
         self.assertEqual(media._selected_frame_count("6"), 6)
         self.assertEqual(media._selected_frame_count("8"), 8)
         self.assertEqual(media._selected_frame_count("16"), 16)
+        self.assertEqual(media._selected_frame_count("24"), 24)
 
-    def test_custom_frame_count_rejects_values_outside_two_through_sixteen(self):
-        for value in (1, "1", 17, "17", 2.5, "2.5", True, "custom"):
+    def test_custom_frame_count_rejects_values_outside_two_through_twenty_four(self):
+        for value in (1, "1", 25, "25", 2.5, "2.5", True, "custom"):
             with self.subTest(value=value), self.assertRaises(media.MediaError) as raised:
                 media._normalize_frame_count_mode(value)
             self.assertEqual(raised.exception.code, "INVALID_SAMPLE_COUNT")

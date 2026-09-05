@@ -1,4 +1,6 @@
 /* Media references */
+.h3ps-media-tag { padding:0; border:0; background:none; color:var(--h3ps-text); font:inherit; cursor:pointer; text-align:left; }
+.h3ps-media-tag:hover { filter:brightness(1.12); text-decoration:underline; }
 .h3ps-media { min-height: 150px; }
 .h3ps-media-filters { display: flex; align-items: center; gap: calc(5px * var(--h3ps-interface-scale)); margin: -2px 0 8px; }
 .h3ps-media-filters button { display: inline-flex; align-items: center; gap: calc(5px * var(--h3ps-interface-scale)); height: calc(25px * var(--h3ps-interface-scale)); padding: 0 calc(8px * var(--h3ps-interface-scale)); border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--h3ps-wave); font-size: var(--h3ps-font-label-sm); cursor: pointer; }

@@ -17,6 +17,7 @@ from .comfy_state import comfyui_runtime_snapshot
 from .devlog import DEVELOPER_MODE, LOG_PATH, PeakVRAMMonitor, gpu_memory_snapshot, write_event
 from .guides import MODE_GUIDES, guide_catalog, guide_for_mode
 from .media import CACHE_ROOT, MAX_FILE_BYTES, MODE_LIMITS, STORE, MediaError, parse_session_id
+from .media_editor import browser_source, commit_edit, prepare_edit, video_frame
 from .memory import assess_free_vram
 from .models.gguf_backend import BACKEND as GGUF_BACKEND
 from .models.external_server_backend import BACKEND as EXTERNAL_SERVER_BACKEND
@@ -1117,11 +1118,69 @@ async def media_content(request: web.Request) -> web.StreamResponse:
             path = Path(asset.get("_prepared_path") or asset["_original_path"])
         elif kind == "sheet":
             path = Path(asset["_contact_sheet_path"])
-        else:
+        elif kind == "source":
             path = Path(asset["_original_path"])
+        elif kind == "editor_source":
+            path = Path(asset["_original_path"]).parent / ("editor_source.png" if asset["type"] == "image" else "editor_source.mp4")
+        else:
+            path = Path(asset.get("_edited_path") or asset["_original_path"])
     except (MediaError, ValueError, IndexError):
         raise web.HTTPNotFound()
     return web.FileResponse(path)
+
+
+@routes.post(f"{ROUTE_PREFIX}/media/{{asset_id}}/edit")
+async def edit_media(request: web.Request) -> web.StreamResponse:
+    body = await _json_body(request)
+    if not isinstance(body, dict) or body.get("action") not in {"preview", "save", "download", "frame", "source"}:
+        return _error("INVALID_EDIT", "Select a valid media edit action.", status=400)
+    if not _claim_media_mutation():
+        return _error("GENERATION_BUSY", "Wait for the current Writer operation to finish.", status=409)
+    prepared = None
+    try:
+        session_id = parse_session_id(body.get("session_id"))
+        asset_id = request.match_info["asset_id"]
+        asset = dict(STORE.get(session_id, asset_id))
+        action = body["action"]
+        if action == "source":
+            _path, cancellation = await _run_thread_worker(browser_source, asset)
+            _propagate_worker_cancellation(cancellation)
+            return web.json_response({"url": STORE.public(asset)["source_url"].replace("kind=source", "kind=editor_source")})
+        if action == "frame":
+            if asset["type"] != "video":
+                raise MediaError("UNSUPPORTED_MEDIA", "Frame stepping requires a video.")
+            result, cancellation = await _run_thread_worker(video_frame, asset, body.get("time", 0), body.get("direction", 0), body.get("crop"), body.get("format") == "png")
+            _propagate_worker_cancellation(cancellation)
+            return web.json_response(result)
+        prepared, cancellation = await _run_thread_worker(prepare_edit, asset, body, action)
+        _propagate_worker_cancellation(cancellation)
+        if action == "preview":
+            return web.json_response(prepared)
+        if action == "save":
+            result = commit_edit(STORE, session_id, asset_id, prepared)
+            prepared = None
+            _invalidate_generation_cache(session_id, asset["mode"])
+            return web.json_response({"asset": result, "assets": STORE.list(session_id)})
+        target = prepared["target"]
+        response = web.StreamResponse(headers={"Content-Type": "image/png" if asset["type"] == "image" else "video/mp4",
+                                              "Content-Disposition": f'attachment; filename="{target.name}"',
+                                              "Content-Length": str(target.stat().st_size)})
+        await response.prepare(request)
+        with target.open("rb") as source:
+            while chunk := await asyncio.to_thread(source.read, 1024*1024):
+                await response.write(chunk)
+        await response.write_eof()
+        return response
+    except (ValueError, TypeError, KeyError) as error:
+        return _error("INVALID_EDIT", "Invalid media edit parameters.", status=400)
+    except MediaError as error:
+        return _media_error(error, status=409 if error.code == "MEDIA_CHANGED" else 400)
+    finally:
+        try:
+            if prepared and prepared.get("directory"):
+                await _run_thread_worker(shutil.rmtree, prepared["directory"], ignore_errors=True)
+        finally:
+            _release_media_mutation()
 
 
 @routes.delete(f"{ROUTE_PREFIX}/media/{{asset_id}}")
