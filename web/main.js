@@ -1,3 +1,4 @@
+import { mediaVisualDescriptor } from "./media_visual.js";
 import { app } from "/scripts/app.js";
 import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getGuides, getModels, getOllamaStatus, getStatus, getSystemPrompt, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, resampleMedia, unloadModel, uploadMedia } from "./api/h3studio.js";
 import { availableReferenceTags, comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isGuideMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
@@ -30,6 +31,7 @@ import {
   selectModelState,
 } from "./studio_state.js";
 import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff, isLocalOllamaHost, releaseComfyVramWhenIdle, unloadWriterModels } from "./vram_handoff.js";
+import { createMediaComposer } from "./media_composer.js";
 
 const EXTENSION_NAME = "minimax.h3.prompt.studio";
 const LAUNCHER_SCHEMA_VERSION = "2";
@@ -346,6 +348,7 @@ const STYLE_MODULES = [
   "shell",
   "workbench",
   "media",
+  "composer",
   "settings",
   "models",
   "providers",
@@ -385,6 +388,8 @@ function icon(name, size = 16) {
     collapse: '<path d="M8 8H3V3m13 5h5V3M8 16H3v5m13-5h5v5"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
     moon: '<path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    download: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/>',
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--h3ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
 }
@@ -412,9 +417,56 @@ function renderAsset(asset, index) {
     </div>`;
 }
 
+function referenceComposerAssets() {
+  return studio.assets.filter((asset) => asset.mode === "Reference" && mediaVisualDescriptor(asset));
+}
+
+function composerAddState() {
+  const assets = studio.assets.filter((asset) => asset.mode === "Reference");
+  const pictureCount = assets.filter((asset) => asset.type === "image").length;
+  if (studio.requestBusy) return { allowed: false, message: "Wait for the current Writer request to finish." };
+  if (pictureCount >= 9) return { allowed: false, message: "Remove a Picture before adding the composition." };
+  if (assets.length >= 12) return { allowed: false, message: "Remove a reference before adding the composition." };
+  return { allowed: true, reference: `<Picture ${pictureCount + 1}>` };
+}
+
+function syncComposerControl(mode = studio.mode) {
+  const button = studio.root.querySelector("[data-open-composer]");
+  if (!button) return;
+  const sources = mode === "Reference" ? referenceComposerAssets() : [];
+  button.hidden = mode !== "Reference";
+  const separator = studio.root.querySelector("[data-compose-separator]");
+  if (separator) separator.hidden = button.hidden;
+  button.disabled = studio.requestBusy || !sources.length;
+  button.title = sources.length ? `Compose a new Picture from ${sources.length} media source${sources.length === 1 ? "" : "s"}` : "Add a Picture or Video first";
+}
+
+async function addComposedPicture({ blob, width, height, mimeType, filename, sources }) {
+  const file = new File([blob], filename, { type: mimeType });
+  const result = await uploadMedia(studio.sessionId, "Reference", [file]);
+  studio.sessionId = result.session_id;
+  studio.assets = [...studio.assets, ...result.assets];
+  studio.mediaFilter = studio.mediaFilter === "image" ? "image" : "all";
+  renderMedia("Reference");
+  const added = result.assets[0];
+  showToast(
+    `${added.reference} added`,
+    `Composed from ${sources.length} source${sources.length === 1 ? "" : "s"} · ${width}×${height} PNG.`,
+  );
+}
+
+function openMediaComposer(trigger) {
+  if (studio.mode !== "Reference" || studio.requestBusy) return;
+  const assets = referenceComposerAssets();
+  if (!assets.length) return;
+  setClearMenuOpen(false);
+  studio.mediaComposer.open({ assets, trigger: studio.root.querySelector("[data-actions-menu-toggle]") });
+}
+
 function renderMedia(mode) {
   if (mode === "Music3") {
     studio.root.querySelectorAll("[data-mode]").forEach((button) => button.classList.remove("is-active"));
+    syncComposerControl(mode);
     syncModeAvailability();
     return;
   }
@@ -457,6 +509,7 @@ function renderMedia(mode) {
       </div>`;
   }
   bindMediaActions(mode);
+  syncComposerControl(mode);
   syncReferenceInsertControl();
   syncModeAvailability();
 }
@@ -601,13 +654,12 @@ function bindMediaActions(mode) {
       media.classList.add("is-reordering");
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("application/x-h3ps-asset", card.dataset.assetId);
-      const asset = studio.assets.find((item) => item.id === card.dataset.assetId);
-      const ghost = document.createElement("div");
-      ghost.className = "h3ps-drag-ghost";
-      ghost.innerHTML = `${asset?.preview_url ? `<img src="${asset.preview_url}" alt="">` : ""}<span><strong>${escapeHtml(asset?.reference || "Media")}</strong><small>Move reference</small></span>`;
-      document.body.appendChild(ghost);
+      const ghost = document.createElement("canvas");
+      ghost.width = ghost.height = 1;
+      ghost.style.cssText = "position:fixed;left:-10px;top:-10px;width:1px;height:1px;pointer-events:none";
+      studio.root.appendChild(ghost);
       studio.dragGhost = ghost;
-      event.dataTransfer.setDragImage(ghost, 24, 20);
+      event.dataTransfer.setDragImage(ghost, 0, 0);
       requestAnimationFrame(() => card.classList.add("is-dragging"));
     });
     card.addEventListener("dragend", () => {
@@ -890,6 +942,7 @@ function setClearMenuOpen(open) {
   if (!menu || !toggle) return;
   menu.hidden = !open;
   toggle.setAttribute("aria-expanded", String(open));
+  studio.root.querySelector("[data-actions-menu-toggle]")?.setAttribute("aria-expanded", String(open));
 }
 
 function clearCurrentPrompts({ notify = true } = {}) {
@@ -1117,7 +1170,7 @@ function setGenerationState(state, label, detail) {
   const busy = state === "busy";
   studio.requestBusy = busy;
   syncModeAvailability();
-  studio.root.querySelectorAll("[data-clear-media], [data-clear-menu-toggle], [data-clear-action]").forEach((control) => { control.disabled = busy; });
+  studio.root.querySelectorAll("[data-clear-media], [data-clear-menu-toggle], [data-actions-menu-toggle], [data-clear-action]").forEach((control) => { control.disabled = busy; });
   if (busy) setClearMenuOpen(false);
   studio.root.querySelector("[data-lyrics-refine-toggle]").disabled = busy;
   const comfyMemory = studio.root.querySelector("[data-comfy-memory-action]");
@@ -2962,12 +3015,18 @@ function createStudio() {
           <div data-video-inputs>
           <div class="h3ps-section-heading">
             <span><small>Media</small><strong data-h3ps-mode-title></strong></span>
-            <div class="h3ps-clear-control" data-clear-control>
-              <button class="h3ps-clear-primary" type="button" data-clear-media>Clear</button>
-              <button class="h3ps-clear-toggle" type="button" aria-label="More clear options" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
-              <div class="h3ps-clear-menu" data-clear-menu hidden>
-                <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
-                <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
+            <div class="h3ps-section-actions">
+
+              <div class="h3ps-clear-control" data-clear-control>
+                <button class="h3ps-clear-primary" type="button" data-actions-menu-toggle aria-expanded="false">Actions</button>
+                <button class="h3ps-clear-toggle" type="button" aria-label="Media actions" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
+                <div class="h3ps-clear-menu" data-clear-menu hidden>
+                  <button type="button" data-open-composer hidden><strong>Compose</strong><small>Create collage</small></button>
+                  <hr data-compose-separator hidden>
+                  <button type="button" data-clear-action data-clear-media><strong>Clear media</strong><small>Keep prompts</small></button>
+                  <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
+                  <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
+                </div>
               </div>
             </div>
           </div>
@@ -3118,6 +3177,19 @@ function createStudio() {
   document.body.appendChild(root);
 
   studio = { root, ...createStudioState({ sessionId: createSessionId(), storage: localStorage }) };
+  studio.mediaComposer = createMediaComposer({
+    root,
+    icon,
+    onAddPicture: addComposedPicture,
+    getAddState: composerAddState,
+    notify: (kind, message) => showToast(kind === "error" ? "Composer failed" : "Media Composer", message),
+    onOpenChange: (open) => {
+      const modal = root.querySelector(".h3ps-modal");
+      modal.inert = open;
+      if (open) modal.removeAttribute("aria-modal");
+      else if (root.classList.contains("is-open")) modal.setAttribute("aria-modal", "true");
+    },
+  });
   root.querySelector("[data-lyrics-use-brief]").checked = studio.musicLyricsUseBrief;
   const durationSlider = root.querySelector("[data-duration-slider]");
   durationSlider.value = String(studio.durationSeconds);
@@ -3135,6 +3207,7 @@ function createStudio() {
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
   root.querySelector("[data-fullscreen-toggle]").addEventListener("click", () => setFullscreen(!studio.fullscreen));
   root.querySelector("[data-theme-toggle]").addEventListener("click", () => setTheme(studio.theme === "light" ? "dark" : "light"));
+  root.querySelector("[data-open-composer]").addEventListener("click", (event) => openMediaComposer(event.currentTarget));
   root.querySelector("[data-interface-size-toggle]").addEventListener("click", () => {
     const menu = root.querySelector("[data-interface-size-menu]");
     setInterfaceSizeMenuOpen(menu.hidden);
@@ -3196,10 +3269,10 @@ function createStudio() {
     setClearMenuOpen(false);
     clearCurrentMedia();
   });
-  root.querySelector("[data-clear-menu-toggle]").addEventListener("click", () => {
+  root.querySelectorAll("[data-clear-menu-toggle], [data-actions-menu-toggle]").forEach(toggle => toggle.addEventListener("click", () => {
     const menu = root.querySelector("[data-clear-menu]");
     setClearMenuOpen(menu.hidden);
-  });
+  }));
   root.querySelector("[data-clear-prompts]").addEventListener("click", () => {
     setClearMenuOpen(false);
     clearCurrentPrompts();
@@ -3646,6 +3719,7 @@ function openStudio() {
 function closeStudio() {
   if (!studio) return;
   const modal = studio.root.querySelector(".h3ps-modal");
+  studio.mediaComposer?.close();
   setSettingsOpen(false);
   setOtherModelsPopover(false);
   closeVideoPreview();
@@ -3752,9 +3826,10 @@ function installLauncher() {
 
 document.addEventListener("keydown", (event) => {
   if (!studio?.root.classList.contains("is-open")) return;
+  const openComposer = studio.root.querySelector(".h3ps-composer.is-open");
   if (event.key === "Tab") {
     const openPopover = studio.root.querySelector("[data-other-models-popover]:not([hidden])");
-    const focusScope = openPopover || studio.root.querySelector(".h3ps-modal");
+    const focusScope = openComposer?.querySelector(".h3ps-cmp-dialog") || openPopover || studio.root.querySelector(".h3ps-modal");
     const focusable = Array.from(focusScope.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
       .filter((element) => element.getClientRects().length && !element.closest("[hidden]"));
     if (focusable.length) {
@@ -3769,6 +3844,7 @@ document.addEventListener("keydown", (event) => {
       }
     }
   }
+  if (openComposer) return;
   if (event.key === "Escape") {
     event.preventDefault();
     if (!studio.root.querySelector("[data-clear-menu]").hidden) {

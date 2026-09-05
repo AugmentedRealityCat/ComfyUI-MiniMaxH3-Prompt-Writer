@@ -227,6 +227,21 @@ class MediaTransactionTests(unittest.TestCase):
             self.assertEqual(media_type, "image/jpeg")
             self.assertEqual(payload, b"prepared-image")
 
+    def test_public_image_exposes_the_prepared_visual_for_local_composition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.asset(root, "image", "Reference", "image", "<Picture 1>")
+            prepared = Path(image["_original_path"]).parent / "prepared.jpg"
+            prepared.touch()
+            image["_prepared_path"] = str(prepared)
+
+            result = media.MediaStore().public(image)
+
+            self.assertEqual(
+                result["prepared_url"],
+                "/h3studio/media/image/content?session_id=session&kind=prepared&revision=0",
+            )
+
     def test_model_visual_rejects_registered_paths_outside_writer_cache(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside_directory:
             cache_root = Path(directory)

@@ -149,6 +149,8 @@ class MediaStore:
         content_revision = asset.get("content_revision", asset.get("sample_index", 0))
         if asset.get("_preview_path"):
             result["preview_url"] = f"{result['content_url']}&kind=preview&revision={content_revision}"
+        if asset.get("_prepared_path"):
+            result["prepared_url"] = f"{result['content_url']}&kind=prepared&revision={content_revision}"
         if asset.get("_contact_sheet_path"):
             result["contact_sheet_url"] = f"{result['content_url']}&kind=sheet&revision={content_revision}"
         result["frames"] = [

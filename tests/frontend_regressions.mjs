@@ -1,6 +1,8 @@
+import './media_visual.mjs';
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import "./composer_geometry.mjs";
 
 const source = await readFile(new URL("../web/compat.js", import.meta.url), "utf8");
 const encoded = Buffer.from(source).toString("base64");
@@ -67,6 +69,7 @@ const settingsSource = await readFile(new URL("../web/settings.js", import.meta.
 const settingsEncoded = Buffer.from(settingsSource).toString("base64");
 const { settingsMarkup } = await import(`data:text/javascript;base64,${settingsEncoded}`);
 const mainSource = await readFile(new URL("../web/main.js", import.meta.url), "utf8");
+const composerSource = await readFile(new URL("../web/media_composer.js", import.meta.url), "utf8");
 const styleModules = [
   "tokens",
   "themes/dark",
@@ -75,6 +78,7 @@ const styleModules = [
   "shell",
   "workbench",
   "media",
+  "composer",
   "settings",
   "models",
   "providers",
@@ -88,7 +92,7 @@ const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async
   await readFile(new URL(`../web/styles/${name}.css`, import.meta.url), "utf8"),
 ])));
 const stylesSource = styleModules.map((name) => styleSources[name]).join("\n");
-const skinSource = ["tokens", "themes/dark", "themes/light", "shell", "workbench", "media", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
+const skinSource = ["tokens", "themes/dark", "themes/light", "shell", "workbench", "media", "composer", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
   .map((name) => styleSources[name])
   .join("\n");
 const componentStyleNames = styleModules.filter((name) => !name.startsWith("themes/") && name !== "tokens");
@@ -736,7 +740,7 @@ test("clear prompts removes brief and generated output while preserving lyrics a
     lyrics: "[Verse]\nKeep these lyrics",
     marker: "preserved",
   });
-  assert.match(mainSource, /data-clear-media>Clear<\/button>/);
+  assert.match(mainSource, /data-clear-media><strong>Clear media<\/strong>/);
   assert.match(mainSource, /data-clear-prompts><strong>Clear prompts<\/strong><small>Keep media<\/small>/);
   assert.match(mainSource, /data-clear-all><strong>Clear all<\/strong><small>Media and prompts<\/small>/);
   assert.match(mainSource, /if \(!await clearCurrentMedia\(\{ notify: false \}\)\) return;/);
@@ -886,6 +890,37 @@ test("media card overlays stay inside the thumbnail and below previews", () => {
   assert.doesNotMatch(stylesSource, /\.h3ps-asset:focus-within \.h3ps-(?:replace|remove)-asset/);
   assert.doesNotMatch(stylesSource, /\.h3ps-more|\.h3ps-asset-menu/);
   assert.match(stylesSource, /\.h3ps-video-preview, \.h3ps-image-preview \{[^}]*z-index:\s*20;/);
+});
+
+test("Media Composer creates an independent Picture from prepared visual sources", () => {
+  assert.match(mainSource, /import \{ createMediaComposer \} from "\.\/media_composer\.js"/);
+  assert.match(mainSource, /"media",\s*"composer",\s*"settings"/);
+  assert.match(mainSource, /data-open-composer[^>]*hidden/);
+  assert.match(mainSource, /uploadMedia\(studio\.sessionId, "Reference", \[file\]\)/);
+  assert.match(mainSource, /studio\.assets = \[\.\.\.studio\.assets, \.\.\.result\.assets\]/);
+  assert.match(mainSource, /pictureCount >= 9/);
+  assert.match(mainSource, /assets\.length >= 12/);
+  assert.match(composerSource, /mediaVisualDescriptor as defaultVisualDescriptor/);
+  assert.match(composerSource, /asset\.contact_sheet_url/);
+  assert.match(composerSource, /ctx\.drawImage\(bitmap,it\.x,it\.y,it\.w,it\.h\)/);
+  assert.doesNotMatch(composerSource, /\bCover\b|background selector|transform:\s*scale/);
+  assert.match(composerSource, /\["auto", "Auto"\]/);
+  assert.match(composerSource, /data-value="auto">Auto<\/button><button type="button" data-value="2">2 cols<\/button><button type="button" data-value="3">3 cols<\/button><button type="button" data-value="grid">Grid<\/button>/);
+  assert.match(composerSource, /if\(d\.type==="resize"\)[\s\S]{0,240}d\.it\.weight=/);
+  assert.match(composerSource, /if \(r\) \{ W=Math\.max\(reqW, reqH\*r\)/);
+  assert.match(composerSource, /drawOutput\(canvas\.getContext\("2d"\),r\.W,r\.H,false\)/);
+  assert.match(composerSource, /data-copy[^>]*aria-label="Copy PNG">\$\{i\("copy", 14\)\}<\/button>/);
+  assert.match(composerSource, /ClipboardItem\(\{"image\/png":png\}\)/);
+  assert.match(composerSource, /data-download[^>]*>\$\{i\("download", 13\)\}Download<\/button>/);
+  assert.match(composerSource, /URL\.createObjectURL\(payload\.blob\)/);
+  assert.doesNotMatch(composerSource, /showReferenceLabels|referenceLabelRect|drawReferenceLabels|data-reference-labels/);
+  assert.doesNotMatch(composerSource, /data-label-layer/);
+  assert.match(composerSource, /b\.disabled=!layoutAvailable\(b\.dataset\.value\)/);
+  assert.match(composerSource, /pad=Math\.max\(10,c\?\.fontSize\*\.45\|\|0\)/);
+  assert.match(composerSource, /requestAnimationFrame\(positionCaptionUI\)/);
+  assert.match(styleSources.composer, /caption-inline textarea\{[^}]*color:var\(--h3ps-canvas-text\)/);
+  assert.match(styleSources.composer, /\.h3ps-cmp-source\{cursor:grab/);
+  assert.doesNotMatch(styleSources.composer, /\.h3ps-cmp-source\{height:104px/);
 });
 
 test("VRAM retry waits for the required free-memory target", () => {

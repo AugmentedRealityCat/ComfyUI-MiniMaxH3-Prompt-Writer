@@ -1111,6 +1111,10 @@ async def media_content(request: web.Request) -> web.StreamResponse:
             path = Path(asset["_frames"][index]["path"])
         elif kind == "preview":
             path = Path(asset.get("_preview_path") or asset["_original_path"])
+        elif kind == "prepared":
+            if asset["type"] != "image":
+                raise MediaError("UNSUPPORTED_MEDIA", "Prepared visuals are available only for Picture assets.")
+            path = Path(asset.get("_prepared_path") or asset["_original_path"])
         elif kind == "sheet":
             path = Path(asset["_contact_sheet_path"])
         else:
