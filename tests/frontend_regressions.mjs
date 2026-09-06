@@ -6,6 +6,8 @@ import "./composer_geometry.mjs";
 import "./editor_geometry.mjs";
 import "./editor_interactions.mjs";
 import "./media_tools.mjs";
+import "./workflow_media.mjs";
+import "./floating_media.mjs";
 
 const source = await readFile(new URL("../web/compat.js", import.meta.url), "utf8");
 const encoded = Buffer.from(source).toString("base64");
@@ -83,6 +85,7 @@ const styleModules = [
   "media",
   "composer",
   "editor",
+  "floating-media",
   "settings",
   "models",
   "providers",
@@ -902,7 +905,7 @@ test("media card overlays stay inside the thumbnail and below previews", () => {
 
 test("Media Composer creates an independent Picture from prepared visual sources", () => {
   assert.match(mainSource, /await import\("\.\/media_composer\.js"\)/);
-  assert.match(mainSource, /"media",\s*"composer",\s*"editor",\s*"settings"/);
+  assert.match(mainSource, /"media",\s*"composer",\s*"editor",\s*"floating-media",\s*"settings"/);
   assert.match(mainSource, /data-open-composer[^>]*hidden/);
   assert.match(mainSource, /uploadMedia\(studio\.sessionId, "Reference", \[file\]\)/);
   assert.match(mainSource, /studio\.assets = \[\.\.\.studio\.assets, \.\.\.result\.assets\]/);
@@ -1468,8 +1471,8 @@ test("text-only Direct UI disables visual and Music modes and explains the fallb
 test("closed Prompt Writer does not advertise an active modal", () => {
   assert.match(mainSource, /<section class="h3ps-modal" role="dialog" aria-label="H3 Prompt Writer" hidden>/);
   assert.doesNotMatch(mainSource, /<section class="h3ps-modal" role="dialog" aria-modal="true"/);
-  assert.match(mainSource, /function openStudio\(\)[\s\S]{0,300}modal\.hidden = false;[\s\S]{0,120}modal\.setAttribute\("aria-modal", "true"\)/);
-  assert.match(mainSource, /function closeStudio\(\)[\s\S]{0,360}modal\.removeAttribute\("aria-modal"\);[\s\S]{0,100}modal\.hidden = true;/);
+  assert.match(mainSource, /function openStudio\(\)[\s\S]{0,500}modal\.hidden = false;[\s\S]{0,120}modal\.setAttribute\("aria-modal", "true"\)/);
+  assert.match(mainSource, /function closeStudio\(\)[\s\S]{0,500}modal\.removeAttribute\("aria-modal"\);[\s\S]{0,100}modal\.hidden = true;/);
 });
 
 test("theme selection is scoped, persisted, and exposed in the main header", () => {

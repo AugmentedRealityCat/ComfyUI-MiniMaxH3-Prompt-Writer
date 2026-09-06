@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import sys
 import tempfile
@@ -75,6 +76,35 @@ class _MultipartRequest(_Request):
 
 class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
     session_id = "11111111-2222-4333-8444-555555555555"
+
+    async def test_workflow_media_returns_original_or_applied_bytes_with_content_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original, applied = Path(directory) / "original.mp4", Path(directory) / "applied.mp4"
+            original.write_bytes(b"original video")
+            applied.write_bytes(b"applied video")
+            asset = {"_original_path": str(original), "_contact_sheet_path": "sheet.png", "content_revision": 2, "status": "needs_edit"}
+            request = _Request(query={"session_id": self.session_id, "kind": "workflow", "revision": "2"}, match_info={"asset_id": "a"})
+            with patch.object(routes.STORE, "get", return_value=asset):
+                response = await routes.media_content(request)
+                self.assertEqual(response._path, original)
+                self.assertEqual(response.headers["X-H3PS-Content-Hash"], hashlib.sha256(original.read_bytes()).hexdigest())
+                asset["_edited_path"] = str(applied)
+                response = await routes.media_content(request)
+                self.assertEqual(response._path, applied)
+                self.assertEqual(response.headers["X-H3PS-Content-Hash"], hashlib.sha256(applied.read_bytes()).hexdigest())
+                asset["content_revision"] = 3
+                with self.assertRaises(routes.web.HTTPConflict):
+                    await routes.media_content(request)
+
+    async def test_workflow_media_rechecks_revision_after_hashing(self):
+        asset = {"_original_path": "original.mp4", "content_revision": 2}
+        async def hashing(_function):
+            asset["content_revision"] = 3
+            return "a" * 64
+        request = _Request(query={"session_id": self.session_id, "kind": "workflow", "revision": "2"}, match_info={"asset_id": "a"})
+        with patch.object(routes.STORE, "get", return_value=asset), patch.object(routes.asyncio, "to_thread", side_effect=hashing):
+            with self.assertRaises(routes.web.HTTPConflict):
+                await routes.media_content(request)
 
     async def test_external_unload_requires_a_known_exact_target(self):
         with patch.object(routes.EXTERNAL_SERVER_BACKEND, "unload") as unload:

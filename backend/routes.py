@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import shutil
 import threading
 import time
@@ -1125,11 +1126,33 @@ async def media_manifest(request: web.Request) -> web.Response:
 
 @routes.get(f"{ROUTE_PREFIX}/media/{{asset_id}}/content")
 async def media_content(request: web.Request) -> web.StreamResponse:
+    headers = {}
     try:
         session_id = parse_session_id(request.query.get("session_id"))
         asset = STORE.get(session_id, request.match_info["asset_id"])
         kind = request.query.get("kind", "original")
-        if kind == "frame":
+        if kind == "workflow":
+            revision = int(request.query.get("revision", "-1"))
+            if revision != int(asset.get("content_revision", asset.get("sample_index", 0))):
+                raise web.HTTPConflict(text="Media changed during transfer. Drop the current version again.")
+            path = Path(asset.get("_edited_path") or asset["_original_path"])
+
+            def content_hash():
+                digest = hashlib.sha256()
+                with path.open("rb") as source:
+                    while chunk := source.read(1024 * 1024):
+                        digest.update(chunk)
+                return digest.hexdigest()
+
+            try:
+                headers["X-H3PS-Content-Hash"] = await asyncio.to_thread(content_hash)
+            except OSError:
+                raise web.HTTPNotFound()
+            current = STORE.get(session_id, request.match_info["asset_id"])
+            if revision != int(current.get("content_revision", current.get("sample_index", 0))):
+                raise web.HTTPConflict(text="Media changed during transfer. Drop the current version again.")
+            headers["Cache-Control"] = "no-store"
+        elif kind == "frame":
             index = int(request.query.get("index", "0"))
             path = Path(asset["_frames"][index]["path"])
         elif kind == "preview":
@@ -1148,7 +1171,7 @@ async def media_content(request: web.Request) -> web.StreamResponse:
             path = Path(asset.get("_edited_path") or asset["_original_path"])
     except (MediaError, ValueError, IndexError):
         raise web.HTTPNotFound()
-    return web.FileResponse(path)
+    return web.FileResponse(path, headers=headers)
 
 
 @routes.post(f"{ROUTE_PREFIX}/media/{{asset_id}}/edit")

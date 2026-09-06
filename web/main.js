@@ -176,6 +176,8 @@ non_diegetic_music:
 N/A`;
 
 let studio;
+let workflowRevision = 0;
+let mediaPanelRequest = 0;
 let ggufRuntimeDiagnosticsPromise = null;
 let referenceInsertTarget = null;
 let studioReturnFocus = null;
@@ -350,6 +352,7 @@ const STYLE_MODULES = [
   "media",
   "composer",
   "editor",
+  "floating-media",
   "settings",
   "models",
   "providers",
@@ -478,6 +481,7 @@ function notifyMediaCompatibility() {
 }
 
 function renderMedia(mode) {
+  studio.floatingMedia?.refresh();
   if (mode === "Music3") {
     studio.root.querySelectorAll("[data-mode]").forEach((button) => button.classList.remove("is-active"));
     syncComposerControl(mode);
@@ -2794,6 +2798,7 @@ function syncFullscreenState() {
 function syncTheme() {
   if (!studio) return;
   studio.root.dataset.theme = studio.theme;
+  studio.floatingMedia?.refresh();
   const button = studio.root.querySelector("[data-theme-toggle]");
   if (!button) return;
   const light = studio.theme === "light";
@@ -2816,6 +2821,7 @@ function syncInterfaceSize() {
   const index = INTERFACE_SIZES.indexOf(size);
   studio.interfaceSize = size;
   studio.root.dataset.interfaceSize = size;
+  studio.floatingMedia?.refresh();
   const slider = studio.root.querySelector("[data-interface-size-range]");
   const output = studio.root.querySelector("[data-interface-size-value]");
   const button = studio.root.querySelector("[data-interface-size-toggle]");
@@ -2880,6 +2886,7 @@ function createStudio() {
             <div class="h3ps-guide-menu" data-guide-menu hidden><span>Loading guides…</span></div>
           </div>
           <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
+          ${supportsWorkflowMedia() ? `<button class="h3ps-icon-button" type="button" data-open-floating-media title="Media panel" aria-label="Media panel">${icon("grid", 17)}</button>` : ""}
           <button class="h3ps-icon-button" type="button" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false" data-theme-toggle>${icon("sun", 17)}</button>
           <div class="h3ps-interface-size-picker" data-interface-size-picker>
             <button class="h3ps-icon-button h3ps-interface-size-button" type="button" title="Interface size 100%" aria-label="Interface size 100%" aria-haspopup="true" aria-expanded="false" data-interface-size-toggle>Aa</button>
@@ -2919,6 +2926,7 @@ function createStudio() {
                 <div class="h3ps-clear-menu" data-clear-menu hidden>
                   <button type="button" data-open-composer hidden><strong>Compose</strong><small>Create collage</small></button>
                   <hr data-compose-separator hidden>
+                  ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
                   <button type="button" data-clear-action data-clear-media><strong>Clear media</strong><small>Keep prompts</small></button>
                   <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
                   <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
@@ -3107,6 +3115,7 @@ function createStudio() {
   root.querySelectorAll("[data-close-studio]").forEach((el) => el.addEventListener("click", closeStudio));
   root.querySelector("[data-fullscreen-toggle]").addEventListener("click", () => setFullscreen(!studio.fullscreen));
   root.querySelector("[data-theme-toggle]").addEventListener("click", () => setTheme(studio.theme === "light" ? "dark" : "light"));
+  root.querySelectorAll("[data-open-floating-media]").forEach(button => button.addEventListener("click", openFloatingMedia));
   root.querySelector("[data-open-composer]").addEventListener("click", (event) => openMediaComposer(event.currentTarget));
   root.querySelector("[data-interface-size-toggle]").addEventListener("click", () => {
     const menu = root.querySelector("[data-interface-size-menu]");
@@ -3550,8 +3559,41 @@ function createStudio() {
   return studio;
 }
 
-function openStudio() {
+function supportsWorkflowMedia() {
+  return !!(app.canvas?.graph && window.LiteGraph?.createNode && app.clientPosToCanvasPos);
+}
+
+async function openFloatingMedia() {
   const current = createStudio();
+  const hasMedia = () => current.assets.some(asset => ["image", "video", "audio"].includes(asset.type) && asset.content_url);
+  if (!hasMedia()) { openStudio(); showToast("Add media first", ""); return; }
+  if (!supportsWorkflowMedia()) { openStudio(); showToast("Workflow canvas unavailable", ""); return; }
+  const request = ++mediaPanelRequest;
+  try {
+    if (!current.floatingMedia) {
+      current.floatingMediaPending ||= Promise.all([
+        import("./floating_media.js"), import("./workflow_media.js"), import("/scripts/api.js"),
+      ]).then(([{ createFloatingMediaPanel }, { createWorkflowMediaTransfer, createMediaMaterializer }, { api }]) => {
+        current.floatingMedia = createFloatingMediaPanel({
+          app, getState: () => current, icon, openWriter: openStudio,
+          transfer: createWorkflowMediaTransfer({ app, liteGraph: window.LiteGraph,
+            getWorkflowRevision: () => workflowRevision,
+            materialize: createMediaMaterializer((...args) => api.fetchApi(...args)) }),
+        });
+      }).finally(() => { current.floatingMediaPending = null; });
+      await current.floatingMediaPending;
+    }
+    if (request !== mediaPanelRequest) return;
+    if (!hasMedia()) { openStudio(); showToast("Add media first", ""); return; }
+    if (closeStudio() === false) return;
+    current.floatingMedia.open();
+  } catch (error) { showToast("Media panel unavailable", error.message); }
+}
+
+function openStudio() {
+  mediaPanelRequest++;
+  const current = createStudio();
+  current.floatingMedia?.suspend(true);
   const modal = current.root.querySelector(".h3ps-modal");
   studioReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   setMusicSystemPromptExpanded(false);
@@ -3569,10 +3611,11 @@ function openStudio() {
 }
 
 function closeStudio() {
+  mediaPanelRequest++;
   if (!studio) return;
   const modal = studio.root.querySelector(".h3ps-modal");
   studio.mediaComposer?.close();
-  if (studio.mediaEditor?.close() === false) return;
+  if (studio.mediaEditor?.close() === false) return false;
   setSettingsOpen(false);
   setOtherModelsPopover(false);
 
@@ -3582,6 +3625,7 @@ function closeStudio() {
   studio.root.classList.remove("is-open");
   studio.root.setAttribute("aria-hidden", "true");
   document.body.classList.remove("h3ps-modal-open");
+  studio.floatingMedia?.suspend(false);
   studioReturnFocus?.focus?.({ preventScroll: true });
   studioReturnFocus = null;
 }
@@ -3736,8 +3780,10 @@ document.addEventListener("keydown", (event) => {
 
 app.registerExtension({
   name: EXTENSION_NAME,
-  commands: [{ id: "h3-prompt-studio.open", label: "Open H3 Prompt Writer", function: openStudio }],
-  menuCommands: [{ path: ["Extensions", "H3 Prompt Writer"], commands: ["h3-prompt-studio.open"] }],
+  beforeConfigureGraph() { workflowRevision++; },
+  commands: [{ id: "h3-prompt-studio.open", label: "Open H3 Prompt Writer", function: openStudio },
+    { id: "h3-prompt-studio.media", label: "Prompt Writer media over workflow", function: openFloatingMedia }],
+  menuCommands: [{ path: ["Extensions", "H3 Prompt Writer"], commands: ["h3-prompt-studio.open", "h3-prompt-studio.media"] }],
   async setup() {
     injectStyles();
     installVramHandoff(app, {
