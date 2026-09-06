@@ -1641,7 +1641,7 @@ test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /if \(studio\.fullscreen\) setFullscreen\(false\)/);
   assert.match(mainSource, /saveUserPreferences\(localStorage, studio\)/);
   assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,420}requestAnimationFrame\(\(\) => \{[\s\S]{0,120}updateBriefLayout\(\)/);
-  assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]:not\(\[hidden\]\)"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
   assert.match(stylesSource, /\.h3ps-root\.is-fullscreen \.h3ps-brief textarea \{ max-height: none; \}/);
@@ -1684,7 +1684,7 @@ test("startup generation state has no legacy preview dependency",()=>{
   const start=mainSource.indexOf('function setGenerationState('),end=mainSource.indexOf('function updatePromptResidency(',start);
   const noop=()=>{},node={querySelector:()=>node,querySelectorAll:()=>[],classList:{toggle:noop},innerHTML:''};
   const studio={root:node,mode:'Reference'};
-  new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop);
+  new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions','HOST_CAPABILITIES',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop,{comfyMemory:true});
 });
 
 test("only confirmed Writer ownership makes unknown router state a release target",async()=>{

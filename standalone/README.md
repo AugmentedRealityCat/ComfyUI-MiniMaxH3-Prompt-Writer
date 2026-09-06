@@ -2,9 +2,9 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.3**
+Current Standalone version: **0.1.4**
 
-[Download H3 Prompt Writer Standalone v0.1.3](https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/releases/download/standalone-v0.1.3/H3-Prompt-Writer-Standalone-Windows-v0.1.3.zip)
+[Download H3 Prompt Writer Standalone v0.1.4](../../../releases/download/standalone-v0.1.4/H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip)
 
 ## This is the Standalone version
 
@@ -39,6 +39,21 @@ over the same folder.
 The Writer opens directly in a full-window browser view. Close the browser tab or
 window normally.
 
+## What's new in v0.1.4
+
+- **Media Composer:** combine Pictures and video contact sheets into a collage. Arrange media, add captions, then copy, download, or add the result as a new Picture.
+- **Media Editor:** crop Pictures, crop and trim videos, and preview the frames used for analysis. Save changes to Media or download a copy. Reset restores the original.
+- **Light theme and Interface Size:** use the header buttons to switch themes and choose 100%, 110%, 120%, or 125%. Your choice is saved.
+- **External llama.cpp routers:** select and unload models on compatible servers.
+
+Open a media card to edit it. In Reference mode, use **Actions → Compose** to create
+a collage from existing Pictures and video sheets. Editing does not overwrite your
+original files.
+
+The floating Media panel, Add to workflow, and Auto VRAM management are ComfyUI
+features and are not included in Standalone. Model unload controls remain available
+for supported providers.
+
 ## Providers
 
 ### Ollama
@@ -53,8 +68,8 @@ current Writer session and are not saved by Standalone.
 
 ### External llama.cpp
 
-Connect to a `llama-server` that you already started. The external server owns model
-loading, context, KV cache, and shutdown.
+Connect to a `llama-server` that you already started. Compatible routers let you
+select and unload models from Writer. Context and KV cache remain server-managed.
 
 ### Local GGUF
 
@@ -99,6 +114,10 @@ The standalone layer is intentionally small. In this repository it imports the s
 clean snapshot of those shared files. Standalone-specific behavior stays in adapter
 files so normal core commits are immediately available to both hosts.
 
+Host capabilities are declared in `h3_standalone/static/app.js`. Keep ComfyUI-only
+actions behind these shared guards, and use Writer's theme and size tokens for
+Standalone controls. CI tests both hosts. The build copies tracked source files only.
+
 Optional development settings live in `data/settings.json`:
 
 ```json
@@ -122,6 +141,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.3.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

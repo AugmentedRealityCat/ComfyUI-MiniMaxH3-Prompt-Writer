@@ -37,6 +37,7 @@ import { editMedia } from "./api/h3studio.js";
 const EXTENSION_NAME = "minimax.h3.prompt.studio";
 const LAUNCHER_SCHEMA_VERSION = "2";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
+const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.h3psHost };
 const vramHandoffCoordinator = createVramHandoffCoordinator();
 const INSTALLATION_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/INSTALLATION.md";
 const TROUBLESHOOTING_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/TROUBLESHOOTING.md";
@@ -1046,7 +1047,7 @@ function setGenerationState(state, label, detail) {
   if (busy) setClearMenuOpen(false);
   studio.root.querySelector("[data-lyrics-refine-toggle]").disabled = busy;
   const comfyMemory = studio.root.querySelector("[data-comfy-memory-action]");
-  comfyMemory.disabled = busy;
+  comfyMemory.disabled = busy || !HOST_CAPABILITIES.comfyMemory;
   comfyMemory.title = busy
     ? "Available after the active Writer request finishes"
     : "Unload models held by ComfyUI without clearing cached workflow results";
@@ -1236,6 +1237,7 @@ function syncLifecycleActions() {
 }
 
 async function releaseComfyVram({ retry = null, requiredFreeMb = null } = {}) {
+  if (!HOST_CAPABILITIES.comfyMemory) return;
   const button = studio.root.querySelector("[data-comfy-memory-action]");
   if (button.disabled || studio.comfyVramReleaseInFlight) return;
   let shouldRetry = false;
@@ -1293,7 +1295,7 @@ function showVramRetry(error, retry) {
   const message = Number.isFinite(freeGb) && Number.isFinite(requiredGb)
     ? `${freeGb.toFixed(1)} GB is free; this runtime needs about ${requiredGb.toFixed(1)} GB.`
     : error.message;
-  const action = writerAutoVramApplies()
+  const action = !HOST_CAPABILITIES.comfyMemory || writerAutoVramApplies()
     ? null
     : { label: "Free ComfyUI VRAM & retry", onClick: () => releaseComfyVram({ retry, requiredFreeMb: error.details?.required_free_mb }) };
   showToast("Not enough free VRAM", message, null, action);
@@ -2859,6 +2861,7 @@ function setInterfaceSizeMenuOpen(open, restoreFocus = false) {
 }
 
 function setFullscreen(fullscreen) {
+  if (!HOST_CAPABILITIES.windowed) fullscreen = true;
   if (!studio || studio.fullscreen === fullscreen) return;
   studio.fullscreen = fullscreen;
   syncFullscreenState();
@@ -3063,6 +3066,11 @@ function createStudio() {
   document.body.appendChild(root);
 
   studio = { root, ...createStudioState({ sessionId: createSessionId(), storage: localStorage }) };
+  root.querySelector("[data-comfy-memory-action]").hidden = !HOST_CAPABILITIES.comfyMemory;
+  if (!HOST_CAPABILITIES.windowed) {
+    studio.fullscreen = true;
+    root.querySelectorAll("[data-close-studio], [data-fullscreen-toggle]").forEach(control => { control.hidden = true; });
+  }
   const onMediaToolOpenChange = (open) => {
     const modal = root.querySelector(".h3ps-modal");
     modal.inert = open;
@@ -3565,7 +3573,7 @@ function createStudio() {
 }
 
 function supportsWorkflowMedia() {
-  return !!(app.canvas?.graph && window.LiteGraph?.createNode && app.clientPosToCanvasPos);
+  return HOST_CAPABILITIES.workflowMedia && !!(app.canvas?.graph && window.LiteGraph?.createNode && app.clientPosToCanvasPos);
 }
 
 async function openFloatingMedia() {
@@ -3611,11 +3619,12 @@ function openStudio() {
   requestAnimationFrame(() => {
     updateBriefLayout();
     modal.tabIndex = -1;
-    (modal.querySelector("[data-close-studio]") || modal).focus({ preventScroll: true });
+    (modal.querySelector("[data-close-studio]:not([hidden])") || modal).focus({ preventScroll: true });
   });
 }
 
 function closeStudio() {
+  if (!HOST_CAPABILITIES.windowed) return false;
   mediaPanelRequest++;
   if (!studio) return;
   const modal = studio.root.querySelector(".h3ps-modal");
@@ -3636,6 +3645,7 @@ function closeStudio() {
 }
 
 function installLauncher() {
+  if (!HOST_CAPABILITIES.windowed) return;
   const existingLauncher = document.querySelector("[data-h3ps-launcher]");
   if (existingLauncher?.dataset.h3psLauncherVersion === LAUNCHER_SCHEMA_VERSION) return;
   existingLauncher?.remove();

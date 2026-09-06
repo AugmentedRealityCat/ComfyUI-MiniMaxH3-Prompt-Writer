@@ -34,3 +34,11 @@ jobs:
 
       - name: Run frontend tests
         run: node --test tests/frontend_regressions.mjs
+
+      - name: Run Standalone tests
+        env:
+          PYTHONPATH: standalone:standalone/h3_standalone/compat:.
+        run: python -m unittest discover -s standalone/tests -p "test_*.py"
+
+      - name: Run Standalone frontend tests
+        run: node --test standalone/tests/frontend.mjs

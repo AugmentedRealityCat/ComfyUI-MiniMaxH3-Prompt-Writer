@@ -45,8 +45,19 @@ if (Test-Path -LiteralPath $target) {
 }
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 
+function Copy-TrackedTree([string]$Relative, [string]$Destination) {
+    $files = @(& git -C $repositoryRoot ls-files -- $Relative)
+    if ($LASTEXITCODE -ne 0 -or -not $files) { throw "No tracked source files: $Relative" }
+    foreach ($file in $files) {
+        $suffix = $file.Substring($Relative.Length).TrimStart("/")
+        $output = if ($suffix) { Join-Path $Destination $suffix } else { $Destination }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot $file) -Destination $output
+    }
+}
+
 foreach ($name in @("h3_standalone", "ui")) {
-    Copy-Item -LiteralPath (Join-Path $standaloneRoot $name) -Destination (Join-Path $target $name) -Recurse
+    Copy-TrackedTree "standalone/$name" (Join-Path $target $name)
 }
 foreach ($name in @("start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "RELEASE_NOTES.md", "VERSION")) {
     Copy-Item -LiteralPath (Join-Path $standaloneRoot $name) -Destination (Join-Path $target $name)
@@ -60,7 +71,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $target "models") | Out-Nul
 $upstreamTarget = Join-Path $target "upstream"
 New-Item -ItemType Directory -Force -Path $upstreamTarget | Out-Null
 foreach ($name in @("backend", "web", "guides", "models.json", "LICENSE")) {
-    Copy-Item -LiteralPath (Join-Path $repositoryRoot $name) -Destination (Join-Path $upstreamTarget $name) -Recurse
+    Copy-TrackedTree $name (Join-Path $upstreamTarget $name)
 }
 $versionSource = [IO.File]::ReadAllText((Join-Path $repositoryRoot "backend\version.py"))
 $extensionMatch = [regex]::Match($versionSource, 'VERSION\s*=\s*"([^"]+)"')
@@ -73,9 +84,6 @@ $snapshot = @(
     "standalone_version=$version"
 )
 [IO.File]::WriteAllLines((Join-Path $upstreamTarget "UPSTREAM_SNAPSHOT.txt"), $snapshot)
-
-Get-ChildItem -LiteralPath $target -Recurse -Directory -Filter "__pycache__" |
-    Remove-Item -Recurse -Force
 
 if ($NoZip) {
     Write-Host "Built: $target"

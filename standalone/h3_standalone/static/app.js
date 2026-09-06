@@ -2,6 +2,7 @@
 const extensions = [];
 
 export const app = {
+  h3psHost: { windowed: false, comfyMemory: false, workflowMedia: false },
   registerExtension(extension) {
     extensions.push(extension);
   },

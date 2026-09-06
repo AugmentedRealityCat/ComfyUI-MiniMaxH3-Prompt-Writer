@@ -17,13 +17,20 @@ class VersionContractTest(unittest.TestCase):
         backend_source = (REPOSITORY_ROOT / "backend" / "version.py").read_text(encoding="utf-8")
         match = re.search(r'^VERSION\s*=\s*"([^"]+)"', backend_source, re.MULTILINE)
         self.assertIsNotNone(match)
-        self.assertEqual(extension_version, "0.4.4")
+        self.assertRegex(extension_version, r"^\d+\.\d+\.\d+$")
         self.assertEqual(match.group(1), extension_version)
 
         standalone_version = (STANDALONE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(standalone_version, "0.1.3")
+        self.assertRegex(standalone_version, r"^\d+\.\d+\.\d+$")
         self.assertNotEqual(standalone_version, extension_version)
         self.assertNotIn("standalone", project["project"]["name"].lower())
+
+    def test_current_release_docs_match_standalone_version(self) -> None:
+        version = (STANDALONE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        for path in (REPOSITORY_ROOT / "README.md", STANDALONE_ROOT / "README.md", STANDALONE_ROOT / "RELEASE_NOTES.md"):
+            self.assertIn(f"H3-Prompt-Writer-Standalone-Windows-v{version}.zip", path.read_text(encoding="utf-8"), str(path))
+        changelog = (STANDALONE_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertEqual(re.search(r"^## ([\d.]+) -", changelog, re.MULTILINE).group(1), version)
 
     def test_registry_package_excludes_standalone_files(self) -> None:
         patterns = {
@@ -44,5 +51,6 @@ class VersionContractTest(unittest.TestCase):
         self.assertIn("core.excludesFile", extension_build)
         self.assertIn("AllowDirty", extension_build)
         self.assertIn("AllowDirty", standalone_build)
+        self.assertIn("ls-files", standalone_build)
         self.assertIn('"settings.example.json"', standalone_build)
         self.assertNotIn('(Join-Path $dataTarget "settings.json")', standalone_build)

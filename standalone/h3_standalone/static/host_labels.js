@@ -2,7 +2,6 @@ function replaceStandaloneText(element) {
   if (!element || element.childElementCount) return;
   const text = element.textContent || "";
   const next = text
-    .replaceAll("Free ComfyUI VRAM", "Release model memory")
     .replaceAll("Models installed in ComfyUI", "Models available to Standalone")
     .replaceAll("ComfyUI Python environment", "Standalone Python environment")
     .replaceAll("ComfyUI/models/LLM/", "models/ (or a configured --model-root)")
@@ -17,18 +16,6 @@ function applyHostLabels() {
   const directOption = document.querySelector('[data-provider-option="direct"] small');
   if (directOption && directOption.textContent !== "Existing files via llama-server") {
     directOption.textContent = "Existing files via llama-server";
-  }
-
-  const memoryButton = document.querySelector("[data-comfy-memory-action]");
-  if (memoryButton) {
-    for (const node of memoryButton.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = node.textContent.replace("Free ComfyUI VRAM", "Release model memory");
-      }
-    }
-    memoryButton.disabled = true;
-    memoryButton.setAttribute("aria-disabled", "true");
-    memoryButton.title = "Standalone manages the selected model itself";
   }
 
   const directPanel = document.querySelector('[data-provider-panel="direct"]');

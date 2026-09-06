@@ -1,5 +1,13 @@
 # Standalone changelog
 
+## 0.1.4 - 2026-09-06
+
+- Updated to the shared H3 Prompt Writer `0.4.5` interface and core.
+- Added Media Composer for collages and Media Editor for crop and trim.
+- Added Light theme and adjustable Interface Size.
+- Added model selection and unload controls for compatible external llama.cpp routers.
+- Kept ComfyUI-only workflow and memory controls out of Standalone.
+
 ## 0.1.3 - 2026-09-02
 
 - Updated the shared Writer interface and core to H3 Prompt Writer extension `0.4.4`.
