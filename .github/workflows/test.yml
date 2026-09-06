@@ -25,7 +25,7 @@ jobs:
           node-version: "22"
 
       - name: Install test dependencies
-        run: python -m pip install aiohttp av pillow
+        run: python -m pip install aiohttp av pillow numpy
 
       - name: Run Python tests
         env:
