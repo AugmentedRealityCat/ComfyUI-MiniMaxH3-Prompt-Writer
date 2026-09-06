@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.4.5 - 2026-09-06
 
 ### Features
 
-- Added **Auto VRAM** support for local External llama.cpp servers, releasing idle ComfyUI workflow models before prompt generation while leaving the external server lifecycle untouched.
+- Media Composer for collages from pictures and video contact sheets.
+- Media Editor for picture crops, video trims and crops, and frame extraction.
+- Floating Media panel for dragging media into ComfyUI workflows.
+- Light theme and adjustable interface size.
+- Auto VRAM management.
+- Model switching and unloading for supported External llama.cpp routers.
 
 ## 0.4.4 - 2026-09-02
 
