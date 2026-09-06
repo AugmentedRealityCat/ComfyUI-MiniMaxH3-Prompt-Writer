@@ -903,10 +903,44 @@ test("media card overlays stay inside the thumbnail and below previews", () => {
   assert.doesNotMatch(stylesSource, /\.h3ps-more|\.h3ps-asset-menu/);
 });
 
+test("Actions keeps media tools ordered and explains unavailable states without hiding Compose", async () => {
+  const { mediaVisualDescriptor } = await import("../web/media_visual.js");
+  const markup = mainSource.slice(mainSource.indexOf('<div class="h3ps-clear-menu"'), mainSource.indexOf('<p class="h3ps-section-hint"'));
+  assert.match(markup, /data-media-panel-action[\s\S]*data-open-composer[\s\S]*<hr data-compose-separator>[\s\S]*data-clear-media[\s\S]*data-clear-prompts[\s\S]*data-clear-all/);
+  assert.doesNotMatch(markup, /data-open-composer[^>]*hidden|data-compose-separator[^>]*hidden/);
+  assert.match(stylesSource, /\.h3ps-clear-menu button:disabled \{ opacity: .45; cursor: default;/);
+  const panel = {}, compose = {};
+  const studio = { mode: "Reference", assets: [], requestBusy: false, root: {
+    querySelector: selector => selector === "[data-media-panel-action]" ? panel : compose,
+  } };
+  const controlSource = mainSource.slice(mainSource.indexOf("function referenceComposerAssets("), mainSource.indexOf("async function addComposedPicture("));
+  const sync = new Function("studio", "mediaVisualDescriptor", controlSource + ";return syncComposerControl;")(studio, mediaVisualDescriptor);
+  sync();
+  assert.equal(panel.disabled, true); assert.equal(panel.title, "Add media first");
+  assert.equal(compose.disabled, true); assert.equal(compose.title, "Add a Picture or Video first");
+  studio.assets = [{ type: "audio", mode: "Reference", content_url: "audio" }];
+  sync(); assert.equal(panel.disabled, false); assert.equal(compose.disabled, true);
+  studio.assets.push({ type: "video", mode: "Reference", content_url: "video" });
+  sync(); assert.equal(compose.disabled, true);
+  studio.assets[1].contact_sheet_url = "sheet";
+  sync(); assert.equal(compose.disabled, false);
+  studio.requestBusy = true;
+  sync(); assert.equal(compose.disabled, true); assert.match(compose.title, /Wait/);
+  studio.requestBusy = false;
+  for (const mode of ["T2VA", "I2VA", "FL2VA", "Music3"]) {
+    sync(mode); assert.equal(compose.disabled, true); assert.match(compose.title, /Reference/);
+    assert.equal(panel.disabled, false); assert.equal(compose.hidden, undefined);
+  }
+  studio.assets = Array.from({length:9}, () => ({type:"image", mode:"Reference", content_url:"picture"}));
+  sync(); assert.equal(compose.disabled, false); // The full Picture quota still permits copy and download.
+  studio.assets = [];
+  sync(); assert.equal(panel.disabled, true); assert.equal(compose.disabled, true);
+});
+
 test("Media Composer creates an independent Picture from prepared visual sources", () => {
   assert.match(mainSource, /await import\("\.\/media_composer\.js"\)/);
   assert.match(mainSource, /"media",\s*"composer",\s*"editor",\s*"floating-media",\s*"settings"/);
-  assert.match(mainSource, /data-open-composer[^>]*hidden/);
+  assert.match(mainSource, /data-open-composer disabled/);
   assert.match(mainSource, /uploadMedia\(studio\.sessionId, "Reference", \[file\]\)/);
   assert.match(mainSource, /studio\.assets = \[\.\.\.studio\.assets, \.\.\.result\.assets\]/);
   assert.match(mainSource, /pictureCount >= 9/);

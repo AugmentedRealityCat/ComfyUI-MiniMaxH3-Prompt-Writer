@@ -436,14 +436,19 @@ function composerAddState() {
 }
 
 function syncComposerControl(mode = studio.mode) {
+  const panel = studio.root.querySelector("[data-media-panel-action]");
+  if (panel) {
+    panel.disabled = !studio.assets.some(asset => ["image", "video", "audio"].includes(asset.type) && asset.content_url);
+    panel.title = panel.disabled ? "Add media first" : "Open Media panel";
+  }
   const button = studio.root.querySelector("[data-open-composer]");
   if (!button) return;
   const sources = mode === "Reference" ? referenceComposerAssets() : [];
-  button.hidden = mode !== "Reference";
-  const separator = studio.root.querySelector("[data-compose-separator]");
-  if (separator) separator.hidden = button.hidden;
   button.disabled = studio.requestBusy || !sources.length;
-  button.title = sources.length ? `Compose a new Picture from ${sources.length} media source${sources.length === 1 ? "" : "s"}` : "Add a Picture or Video first";
+  button.title = mode !== "Reference" ? "Switch to Reference mode"
+    : studio.requestBusy ? "Wait for the current request to finish"
+    : sources.length ? `Compose a new Picture from ${sources.length} media source${sources.length === 1 ? "" : "s"}`
+    : "Add a Picture or Video first";
 }
 
 async function addComposedPicture({ blob, width, height, mimeType, filename, sources }) {
@@ -2924,9 +2929,9 @@ function createStudio() {
                 <button class="h3ps-clear-primary" type="button" data-actions-menu-toggle aria-expanded="false">Actions</button>
                 <button class="h3ps-clear-toggle" type="button" aria-label="Media actions" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
                 <div class="h3ps-clear-menu" data-clear-menu hidden>
-                  <button type="button" data-open-composer hidden><strong>Compose</strong><small>Create collage</small></button>
-                  <hr data-compose-separator hidden>
-                  ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
+                  ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media data-media-panel-action disabled title="Add media first"><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
+                  <button type="button" data-open-composer disabled><strong>Compose</strong><small>Create collage</small></button>
+                  <hr data-compose-separator>
                   <button type="button" data-clear-action data-clear-media><strong>Clear media</strong><small>Keep prompts</small></button>
                   <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
                   <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
