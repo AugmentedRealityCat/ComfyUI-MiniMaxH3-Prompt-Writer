@@ -6,15 +6,23 @@
 
 H3 Prompt Writer is a prompt-writing workspace for MiniMax H3 inside ComfyUI. Start with a plain-language Creative Brief, add optional image, video, or audio references, and generate an editable prompt in the format expected by H3.
 
-It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing H3 workflow. It does not run MiniMax H3, change the graph, or queue a video.
+It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing H3 workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Writer does not run MiniMax H3 or queue a video.
 
 ComfyUI extension: **0.4.4** · [Download ZIP](https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/releases/download/v0.4.4/H3-Prompt-Writer-ComfyUI-v0.4.4.zip) · [Installation](docs/INSTALLATION.md)
 
 Standalone for Windows: **0.1.3** · [Download ZIP](https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/releases/download/standalone-v0.1.3/H3-Prompt-Writer-Standalone-Windows-v0.1.3.zip) · [Setup guide](standalone/README.md)
 
+## What's new in v0.4.5
+
+- Media Composer: combine pictures and video contact sheets into a collage.
+- Media Editor: crop pictures, trim and crop video, and extract individual frames.
+- Floating Media panel: drag Writer media into your workflow.
+- Light theme and adjustable interface size.
+- Auto VRAM management.
+- Model switching and unloading for supported External llama.cpp routers.
+
 ## What's new in v0.4.4
 
-- Automatic VRAM management between Prompt Writer and ComfyUI for Direct GGUF and local Ollama.
 - Standalone for Windows. Use H3 Prompt Writer without ComfyUI.
 - Qwen 3.8 and Qwen3-VL support.
 - Expanded Direct GGUF support and runtime controls.

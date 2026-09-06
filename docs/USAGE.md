@@ -11,9 +11,11 @@
 7. Select **Generate prompt**.
 8. Review or edit the generated prompt, then select **Copy prompt** and paste it into your H3 workflow.
 
-Prompt Writer creates text. It does not add nodes, modify the graph, or queue a video workflow.
+Generating a prompt does not change or queue your workflow. To add media loaders, use the separate **Media panel** described below.
 
 Use the fullscreen button in the Writer header when you want the workspace to fill the browser. Press Escape to leave fullscreen.
+
+The sun/moon button switches between Dark and Light. The **Aa** button adjusts **Interface Size** from 100% to 125%. These preferences are saved and affect only Prompt Writer, not ComfyUI or exported media.
 
 ![Reference mode with a generated prompt](assets/v0.3/reference-workspace.png)
 
@@ -104,6 +106,30 @@ In Reference mode, select **Replace** on an asset card or drop one new file on t
 For video, Writer prepares an ordered contact sheet. Open a video card to inspect **What the model sees** and choose the available frame-sampling options. The contact sheet still represents the same `<Video N>` reference; it does not create extra `<Picture N>` tags.
 
 Local providers and remote API providers use the prepared contact sheet instead of the original encoded video stream. API providers can receive the derived sheet, but not the original video bytes.
+
+## Media Editor
+
+Open a picture or video card to edit it. Crop pictures, trim or crop video, and inspect the applied result in **What the model sees**. For video, you can also download the current frame or add it as a new Picture.
+
+Edits stay in the editor until you select **Apply**. **Reset edits** returns the draft to the original media; Apply saves that reset. Closing with unapplied changes lets you keep editing or discard the draft. The original file is preserved.
+
+Long clips can stay in Media with **Trim required**. Trim them to 2–15 seconds and Apply before using them as H3 Reference inputs.
+
+## Media Composer
+
+In Reference mode, open **Actions > Compose** to combine existing pictures and video contact sheets. Use Auto or a column layout, then move and resize items as needed. You can add captions and choose the canvas shape and output size.
+
+**Add as Picture** adds the collage as a new, independent Picture. You can also download or copy the PNG. Later changes to the source media do not update an existing collage.
+
+## Media panel
+
+Open **Media panel** from the Writer header or **Actions > Media panel**. It floats over the workflow without blocking the canvas. Drag its header to move it; the position is saved. Opening Writer temporarily hides the panel, and closing Writer brings it back.
+
+Drag media to empty canvas to create a Load Image, Load Video, or Load Audio node. Drop onto a compatible loader to replace its file without changing its connections. Supported targets are ComfyUI's **Load Image**, **Load Image (as Mask)**, **Load Video**, **Load Audio**, and Video Helper Suite's **Load Video (Upload)**. Other nodes are left unchanged.
+
+Each drop uses the original file or its latest Applied edit. Unapplied drafts and video contact sheets are not transferred. Media marked **Trim required** can still be transferred. Later Writer edits do not update existing loaders; drag again when you want the new version.
+
+Transferred files are stored in `ComfyUI/input/prompt-writer`. Reusing unchanged media reuses the file. If there is no media, Writer shows **Add media first**.
 
 ## Audio references
 
