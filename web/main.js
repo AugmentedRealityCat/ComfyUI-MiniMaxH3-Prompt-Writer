@@ -1066,6 +1066,7 @@ function updatePromptResidency(status) {
   if (!residency) return;
   studio.promptResidency = {
     direct: residency.direct?.loaded ? { modelId: residency.direct.model_id || null } : null,
+    external: Array.isArray(residency.external?.targets) ? residency.external.targets : [],
     ollama: Array.isArray(residency.ollama?.models) ? residency.ollama.models.filter(Boolean) : [],
   };
 }
@@ -1143,22 +1144,29 @@ function clearActiveWriterRequest() {
   studio.activeRequestOllamaHost = null;
 }
 
-async function unloadWriterModelsBeforeQueue() {
+async function unloadWriterModelsBeforeQueue(signal) {
   const ollamaHost = vramHandoffOllamaHost();
   const activeRequest = vramHandoffCoordinator.activeWriterRequest();
   const activeFamily = studio?.activeRequestFamily;
   const activeLocal = activeFamily === "gguf"
+    || (activeFamily === "external" && studio?.selectedModel?.lifecycle_supported)
     || (activeFamily === "ollama" && isLocalOllamaHost(studio?.activeRequestOllamaHost || ollamaHost));
+  const requiredTargets = [];
   if (activeRequest && activeLocal) {
-    const result = await unloadModel({
+    const target = {
       family: activeFamily,
       model_id: studio.activeRequestModelId,
       ollama_host: activeFamily === "ollama" ? (studio.activeRequestOllamaHost || ollamaHost) : null,
-    });
+    };
+    if(activeFamily === "external") requiredTargets.push(target);
+    const result = await unloadModel(target);
     if (result?.unload_requested === false) throw new Error("Prompt Writer could not stop and unload its local model.");
     try { await activeRequest; } catch {}
   }
+  signal?.throwIfAborted();
   await unloadWriterModels({
+    signal,
+    requiredTargets,
     getStatus,
     unloadModel,
     ollamaHost,
@@ -1168,24 +1176,35 @@ async function unloadWriterModelsBeforeQueue() {
 }
 
 function showVramHandoffQueueError(error) {
-  openStudio();
-  showToast("Auto VRAM stopped Queue", error.message || "Prompt Writer could not release its local model. The workflow was not queued.", error.details);
+  const message = error.message || "Prompt Writer could not release its local model.";
+  if (studio?.root.classList.contains("is-open")) {
+    showToast("Queue continuing without VRAM release", message, error.details);
+  } else {
+    app.extensionManager?.toast?.add({severity:"warn", summary:"Auto VRAM: Queue continuing", detail:message, life:8000});
+  }
 }
 
 function lifecycleTargets() {
   const targets = [];
   if (studio.promptResidency.direct) targets.push({ family: "gguf", modelId: studio.promptResidency.direct.modelId });
   studio.promptResidency.ollama.forEach((modelId) => targets.push({ family: "ollama", modelId, endpoint: studio.ollamaHost }));
+  const selected = studio.selectedModel;
+  const external = (studio.promptResidency.external || []).filter(t => t.writer_owned || t.model_id === selected?.id);
+  if (selected?.family === "external" && selected.lifecycle_supported && !external.some(t => t.model_id === selected.id)) {
+    external.push({model_id:selected.id, state:"unknown", writer_owned:false});
+  }
+  external.forEach(target => targets.push({family:"external", modelId:target.model_id, state:target.state, writerOwned:target.writer_owned}));
   return targets;
 }
 
 function lifecycleButtonMarkup(target, { stop = false } = {}) {
-  const provider = target.family === "ollama" ? "ollama" : "direct";
-  const label = stop ? "Stop & unload" : target.family === "ollama" ? "Unload Ollama" : "Unload Direct";
+  const provider = target.family === "external" ? "external" : target.family === "ollama" ? "ollama" : "direct";
+  const disabled = target.family === "external" && (["loading","unloading","unloaded"].includes(target.state) || (target.state === "unknown" && !target.writerOwned));
+  const label = target.state === "unloading" ? "Unloading…" : target.state === "loading" ? "Loading…" : stop ? "Stop & unload" : target.family === "external" ? "Unload" : target.family === "ollama" ? "Unload Ollama" : "Unload Direct";
   const title = stop
     ? "Cancel the active request and unload its prompt model"
     : `Unload ${target.modelId || (target.family === "ollama" ? "the Ollama model" : "the Direct model")}`;
-  return `<button class="h3ps-memory-action h3ps-prompt-lifecycle-action" type="button" data-lifecycle-family="${target.family}" ${target.modelId ? `data-lifecycle-model="${escapeHtml(target.modelId)}"` : ""} data-lifecycle-stop="${stop}" title="${escapeHtml(title)}"><span class="h3ps-provider-icon" data-provider-icon="${provider}" aria-hidden="true"></span>${label}</button>`;
+  return `<button class="h3ps-memory-action h3ps-prompt-lifecycle-action" type="button" data-lifecycle-family="${target.family}" ${disabled ? "disabled" : ""} ${target.modelId ? `data-lifecycle-model="${escapeHtml(target.modelId)}"` : ""} data-lifecycle-stop="${stop}" title="${escapeHtml(title)}"><span class="h3ps-provider-icon" data-provider-icon="${provider}" aria-hidden="true"></span>${label}</button>`;
 }
 
 function syncLifecycleActions() {
@@ -1193,8 +1212,8 @@ function syncLifecycleActions() {
   const directStatus = studio.root.querySelector("[data-model-lifecycle]");
   if (directStatus) directStatus.hidden = !studio.promptResidency.direct;
   const activeFamily = studio.activeRequestFamily;
-  const activeLocal = studio.requestBusy && ["gguf", "ollama"].includes(activeFamily);
-  const activeTarget = activeLocal ? { family: activeFamily, modelId: studio.activeRequestModelId } : null;
+  const activeLocal = studio.requestBusy && (["gguf", "ollama"].includes(activeFamily) || (activeFamily === "external" && studio.selectedModel?.lifecycle_supported));
+  const activeTarget = activeLocal && activeFamily !== "external" ? { family: activeFamily, modelId: studio.activeRequestModelId } : null;
   const background = lifecycleTargets().filter((target) => {
     if (!activeTarget) return true;
     if (activeTarget.family === "gguf" && target.family === "gguf") return false;
@@ -1279,15 +1298,25 @@ async function runLifecycleAction(event) {
   const stop = button.dataset.lifecycleStop === "true";
   if (stop) setGenerationState("busy", "Stopping & unloading", "Cancelling the request and unloading its prompt model");
   button.disabled = true;
+  if (family === "external") {
+    const target = studio.promptResidency.external?.find(t => t.model_id === modelId);
+    if (target) target.state = "unloading";
+    button.textContent = "Unloading…";
+  }
   try {
     await unloadModel({ family, model_id: modelId, ollama_host: family === "ollama" ? studio.ollamaHost : null });
     if (family === "gguf") studio.promptResidency.direct = null;
-    else studio.promptResidency.ollama = studio.promptResidency.ollama.filter((name) => name !== modelId);
+    else if(family === "external" && !stop) studio.promptResidency.external = (studio.promptResidency.external||[]).map(t=>t.model_id===modelId ? {...t,state:"unloaded",writer_owned:false} : t);
+    else if(family === "ollama") studio.promptResidency.ollama = studio.promptResidency.ollama.filter((name) => name !== modelId);
     showToast(
-      stop ? "Stop & unload requested" : family === "ollama" ? "Ollama model unloaded" : "Direct model unloaded",
+      stop ? "Stop & unload requested" : family === "external" ? "External model unloaded" : family === "ollama" ? "Ollama model unloaded" : "Direct model unloaded",
       stop ? "The request will stop and release its model at the next safe point." : "GPU memory used by the prompt model was released.",
     );
   } catch (error) {
+    if (family === "external") {
+      const target = studio.promptResidency.external?.find(t => t.model_id === modelId);
+      if (target) target.state = "unknown";
+    }
     showToast(error.code || "Unload failed", error.message, error.details);
   } finally {
     button.disabled = false;
@@ -1360,6 +1389,7 @@ async function startGenerationPreview() {
       ];
       showToast(studio.mode === "Music3" ? "Caption generated" : "Prompt generated", details.filter(Boolean).join(" · "));
     }
+    if (result.lifecycle_warning) showToast("External cleanup", result.lifecycle_warning, null, null, {dismissOnWorkspaceClick:true});
   } catch (error) {
     if (error.code === "GENERATION_CANCELLED") {
       showToast("Generation cancelled", "The active request stopped.");
@@ -1604,7 +1634,7 @@ function renderExternalServerControl() {
   const connected = studio.externalModel;
   const config = studio.externalServerConfig || { url: "http://127.0.0.1:8080", model: "" };
   const title = connected ? connected.name.split("/").pop() : "External llama.cpp server";
-  const contextLabel = Number.isFinite(connected?.server_context_tokens)
+  const contextLabel = connected?.context_verified !== false && Number.isFinite(connected?.server_context_tokens)
     ? ` · ${Math.round(connected.server_context_tokens / 1024)}K context`
     : "";
   const state = connected
@@ -1621,8 +1651,9 @@ function renderExternalServerControl() {
       </div>
       <form data-external-server-form>
         <label><span>Server URL</span><input name="url" type="url" value="${escapeHtml(config.url)}" placeholder="http://127.0.0.1:8080" required></label>
-        <label><span>Model ID <em>optional</em></span><input name="model" type="text" value="${escapeHtml(config.model)}" placeholder="Use the first loaded model"></label>
-        <small>Localhost only. Context, KV cache and model loading stay under server control.</small>
+        <label><span>Model ID <em>optional</em></span><input name="model" type="text" value="${escapeHtml(config.model)}" placeholder="Required when the server lists multiple models"></label>
+        <label><span>API key <em>optional</em></span><input name="api_key" type="password" autocomplete="off" placeholder="Blank reuses the key held in server memory"></label>
+        <small>Localhost only. Context and KV cache stay server-managed. Model lifecycle controls require a llama.cpp router.</small>
         <div><button type="button" data-external-server-disconnect ${connected || studio.externalServerConfig ? "" : "hidden"}>Disconnect</button><span></span><button type="submit">${connected ? "Reconnect" : "Connect"}</button></div>
       </form>
     </div>`;
@@ -2031,7 +2062,7 @@ function selectModel(model, { preserveSettingsProvider = false } = {}) {
   const keepLoadedControl = studio.root.querySelector("[data-keep-loaded-control]");
   const vramHandoff = studio.root.querySelector("[data-vram-handoff]");
   const vramHandoffControl = studio.root.querySelector("[data-vram-handoff-control]");
-  keepLoadedControl.hidden = remote;
+  keepLoadedControl.hidden = remote && !model?.lifecycle_supported;
   keepLoaded.checked = studio.keepModelLoaded;
   if (vramHandoffControl && vramHandoff) {
     vramHandoffControl.hidden = !selectedModelSupportsVramHandoff();
@@ -2266,6 +2297,7 @@ async function connectExternalServer(form) {
   const config = {
     url: form.elements.url.value.trim(),
     model: form.elements.model.value.trim(),
+    ...(form.elements.api_key.value.trim() ? {api_key:form.elements.api_key.value.trim()} : {}),
   };
   submit.disabled = true;
   submit.textContent = "Connecting…";
@@ -2278,7 +2310,9 @@ async function connectExternalServer(form) {
     saveExternalServerConfig(localStorage, saved);
     studio.models = [...studio.models.filter((model) => model.family !== "external"), result.model];
     selectModel(result.model);
-    showToast("llama.cpp connected", `${result.model.name} · ${Math.round(result.model.server_context_tokens / 1024)}K context`);
+    const context = result.model.context_verified !== false
+      ? ` · ${Math.round(result.model.server_context_tokens / 1024)}K context` : "";
+    showToast("llama.cpp connected", `${result.model.name}${context}`);
   } catch (error) {
     studio.externalServerError = error;
     showToast(error.code || "Connection failed", error.message, error.details);

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
 import threading
 from typing import Any, Callable
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode
 
 from ..context import (
     CHAT_TEMPLATE_OVERHEAD_TOKENS,
@@ -14,6 +15,7 @@ from ..context import (
 )
 from ..h3_pipeline import run_h3_pipeline, validate_media_capabilities
 from .contract import ModelError
+from .external_lifecycle import RouterLifecycle
 
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
@@ -38,7 +40,7 @@ def _split_embedded_reasoning(content: str) -> tuple[str, str | None]:
 def normalize_server_url(value: str | None) -> str:
     raw = (value or DEFAULT_SERVER_URL).strip()
     parsed = urlsplit(raw)
-    if parsed.scheme != "http" or not parsed.hostname:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ModelError(
             "INVALID_EXTERNAL_SERVER_URL",
             "Enter a local llama.cpp server URL such as http://127.0.0.1:8080.",
@@ -46,7 +48,7 @@ def normalize_server_url(value: str | None) -> str:
     if parsed.hostname.lower() not in {"127.0.0.1", "localhost", "::1"}:
         raise ModelError(
             "EXTERNAL_SERVER_NOT_LOCAL",
-            "H3 Prompt Writer only connects to a llama.cpp server on this computer.",
+            "External llama.cpp requires loopback: 127.0.0.1, localhost, or ::1. Publish a same-machine Docker port on host loopback.",
         )
     path = parsed.path.rstrip("/")
     if path == "/v1":
@@ -62,8 +64,11 @@ def normalize_server_url(value: str | None) -> str:
             "The llama.cpp server URL cannot contain credentials, a query, or a fragment.",
         )
     host = f"[{parsed.hostname}]" if ":" in parsed.hostname and not parsed.hostname.startswith("[") else parsed.hostname
-    port = parsed.port or 80
-    return f"http://{host}:{port}"
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as error:
+        raise ModelError("INVALID_EXTERNAL_SERVER_URL", "Enter a valid server port.") from error
+    return f"{parsed.scheme}://{host}:{port}"
 
 
 class _RemoteChatHandler:
@@ -118,6 +123,9 @@ class ExternalServerBackend:
         self.lock = threading.RLock()
         self._connection: http.client.HTTPConnection | None = None
         self._connection_lock = threading.Lock()
+        self._keys = {}
+        self.router = RouterLifecycle(self._request_json)
+        self._unload_requested = threading.Event()
 
     def status(self) -> dict[str, Any]:
         return {
@@ -132,6 +140,7 @@ class ExternalServerBackend:
 
     def prepare_request(self) -> None:
         self.cancel_event.clear()
+        self._unload_requested.clear()
 
     def cancel(self) -> bool:
         self.cancel_event.set()
@@ -145,7 +154,23 @@ class ExternalServerBackend:
         return True
 
     def request_unload(self) -> bool:
+        self._unload_requested.set()
         return self.cancel()
+
+    def unload(self, model_id):
+        with self.lock:
+            self.router.transition(model_id, False)
+
+    def _auth_headers(self, endpoint):
+        key = self._keys.get(endpoint)
+        return {"Authorization": f"Bearer {key}"} if key else {}
+
+    def _redact(self, value):
+        text = str(value)
+        for key in list(self._keys.values()):
+            if key:
+                text = text.replace(key, "[redacted]")
+        return text
 
     def _request_json(
         self,
@@ -157,13 +182,15 @@ class ExternalServerBackend:
         timeout: int,
     ) -> dict[str, Any]:
         parsed = urlsplit(endpoint)
-        connection = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=timeout)
+        connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), timeout=timeout)
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", **self._auth_headers(endpoint)}
         if body is not None:
             headers["Content-Type"] = "application/json"
-        with self._connection_lock:
-            self._connection = connection
+        if path == "/models/load":
+            with self._connection_lock:
+                self._connection = connection
         try:
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
@@ -174,7 +201,7 @@ class ExternalServerBackend:
             raise ModelError(
                 "EXTERNAL_SERVER_UNAVAILABLE",
                 "H3 Prompt Writer could not reach the local llama.cpp server.",
-                {"url": endpoint, "reason": str(error)},
+                {"url": endpoint, "reason": self._redact(error)},
             ) from error
         finally:
             with self._connection_lock:
@@ -194,8 +221,8 @@ class ExternalServerBackend:
             message = remote_error.get("message") if isinstance(remote_error, dict) else None
             raise ModelError(
                 "EXTERNAL_SERVER_ERROR",
-                message or f"The llama.cpp server returned HTTP {response.status}.",
-                {"url": endpoint, "status": response.status, "response": data},
+                self._redact(message) if message else f"The llama.cpp server returned HTTP {response.status}.",
+                {"url": endpoint, "status": response.status, "response": self._redact(data)},
             )
         if not isinstance(data, dict):
             raise ModelError(
@@ -211,7 +238,8 @@ class ExternalServerBackend:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         parsed = urlsplit(endpoint)
-        connection = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=REQUEST_TIMEOUT_SECONDS)
+        connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), timeout=REQUEST_TIMEOUT_SECONDS)
         body = json.dumps(payload).encode("utf-8")
         with self._connection_lock:
             self._connection = connection
@@ -224,7 +252,7 @@ class ExternalServerBackend:
                 "POST",
                 "/v1/chat/completions",
                 body=body,
-                headers={"Accept": "text/event-stream", "Content-Type": "application/json"},
+                headers={"Accept": "text/event-stream", "Content-Type": "application/json", **self._auth_headers(endpoint)},
             )
             response = connection.getresponse()
             if not 200 <= response.status < 300:
@@ -237,8 +265,8 @@ class ExternalServerBackend:
                 message = remote_error.get("message") if isinstance(remote_error, dict) else None
                 raise ModelError(
                     "EXTERNAL_SERVER_ERROR",
-                    message or f"The llama.cpp server returned HTTP {response.status}.",
-                    {"url": endpoint, "status": response.status, "response": data},
+                    self._redact(message) if message else f"The llama.cpp server returned HTTP {response.status}.",
+                    {"url": endpoint, "status": response.status, "response": self._redact(data)},
                 )
             while True:
                 if self.cancel_event.is_set():
@@ -279,7 +307,7 @@ class ExternalServerBackend:
             raise ModelError(
                 "EXTERNAL_SERVER_UNAVAILABLE",
                 "The connection to the local llama.cpp server was interrupted.",
-                {"url": endpoint, "reason": str(error)},
+                {"url": endpoint, "reason": self._redact(error)},
             ) from error
         finally:
             with self._connection_lock:
@@ -319,10 +347,23 @@ class ExternalServerBackend:
 
     def probe_model(self, config: dict[str, Any]) -> dict[str, Any]:
         endpoint = normalize_server_url(str(config.get("url") or ""))
+        if "api_key" in config:
+            key = config["api_key"]
+            if not isinstance(key, str) or len(key) > 4096 or any(c in key for c in "\r\n"):
+                raise ModelError("INVALID_EXTERNAL_API_KEY", "Enter a valid API key.")
+            self._keys[endpoint] = key.strip()
         self._request_json(endpoint, "GET", "/health", timeout=CONNECT_TIMEOUT_SECONDS)
-        props = self._request_json(endpoint, "GET", "/props", timeout=CONNECT_TIMEOUT_SECONDS)
-        models = self._request_json(endpoint, "GET", "/v1/models", timeout=CONNECT_TIMEOUT_SECONDS)
-        entries = models.get("data")
+        router = False
+        try:
+            entries = self.router.entries(endpoint)
+            router = True
+        except ModelError as error:
+            if error.code != "EXTERNAL_ROUTER_UNAVAILABLE" and not (
+                isinstance(error.details, dict) and error.details.get("status") in {404, 405, 501}
+            ):
+                raise
+            entries = self._request_json(endpoint, "GET", "/v1/models", timeout=CONNECT_TIMEOUT_SECONDS).get("data")
+        props = {} if router else self._request_json(endpoint, "GET", "/props", timeout=CONNECT_TIMEOUT_SECONDS)
         if not isinstance(entries, list) or not entries:
             raise ModelError(
                 "EXTERNAL_MODEL_NOT_FOUND",
@@ -330,10 +371,10 @@ class ExternalServerBackend:
                 {"url": endpoint},
             )
         requested_model = str(config.get("model") or "").strip()
-        selected = next(
-            (item for item in entries if isinstance(item, dict) and item.get("id") == requested_model),
-            None,
-        ) if requested_model else next((item for item in entries if isinstance(item, dict)), None)
+        if not requested_model and len(entries) != 1:
+            raise ModelError("EXTERNAL_MODEL_AMBIGUOUS", "Enter the exact Model ID; the server lists more than one model.")
+        matches = [item for item in entries if isinstance(item, dict) and (not requested_model or item.get("id") == requested_model)]
+        selected = matches[0] if len(matches) == 1 else None
         if selected is None:
             raise ModelError(
                 "EXTERNAL_MODEL_NOT_FOUND",
@@ -343,6 +384,8 @@ class ExternalServerBackend:
         remote_model = str(selected.get("id") or "").strip()
         if not remote_model:
             raise ModelError("EXTERNAL_MODEL_NOT_FOUND", "The llama.cpp server returned an unnamed model.")
+        if router and selected["status"]["value"] in {"loaded", "sleeping"}:
+            props = self._request_json(endpoint, "GET", "/props?" + urlencode({"model": remote_model, "autoload": "false"}), timeout=CONNECT_TIMEOUT_SECONDS)
         modalities = props.get("modalities")
         capabilities = selected.get("capabilities")
         has_multimodal = (
@@ -350,9 +393,11 @@ class ExternalServerBackend:
         ) or (
             isinstance(capabilities, list) and "multimodal" in capabilities
         )
+        architecture = selected.get("architecture") or {}
+        has_multimodal = has_multimodal or (isinstance(architecture, dict) and "image" in (architecture.get("input_modalities") or []))
         context_tokens = self._context_tokens(props)
         name = remote_model.replace("\\", "/").rsplit("/", 1)[-1]
-        return {
+        model = {
             "id": f"external::{endpoint}::{remote_model}",
             "name": name,
             "family": "external",
@@ -367,9 +412,13 @@ class ExternalServerBackend:
             "endpoint": endpoint,
             "remote_model": remote_model,
             "server_context_tokens": context_tokens,
+            "context_verified": bool(props),
             "externally_managed": True,
             "source_label": f"External llama.cpp · {endpoint}",
+            "lifecycle_supported": router,
         }
+        self.router.register(model)
+        return model
 
     def preflight(
         self,
@@ -402,7 +451,7 @@ class ExternalServerBackend:
             + CHAT_TEMPLATE_OVERHEAD_TOKENS
         )
         minimum_required = estimated_input_tokens + CONTEXT_SAFETY_TOKENS
-        if minimum_required > context_tokens:
+        if minimum_required > context_tokens and model_info.get("context_verified", True):
             raise ModelError(
                 "CONTEXT_BUDGET_EXCEEDED",
                 "This request does not fit the context configured on the external llama.cpp server.",
@@ -451,10 +500,10 @@ class ExternalServerBackend:
         runtime_plan: dict[str, Any] | None = None,
         on_phase: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
-        del unload_after
         effective_thinking = False if self.reasoning_managed_by_server else thinking
         with self.lock:
             validate_media_capabilities(model_info, assembled)
+            response = None
             try:
                 runtime_plan = runtime_plan or self.preflight(
                     model_info,
@@ -465,6 +514,10 @@ class ExternalServerBackend:
                 )
                 if on_phase:
                     on_phase("loading_model")
+                if model_info.get("lifecycle_supported"):
+                    self.router.transition(model_info["id"], True, self.cancel_event.is_set)
+                    refreshed = self.probe_model({"url": model_info["endpoint"], "model": model_info["remote_model"]})
+                    runtime_plan = self.preflight(refreshed, assembled, context_profile=context_profile, kv_cache=kv_cache, thinking=thinking)
                 self._connect(model_info)
                 if self.cancel_event.is_set():
                     raise ModelError("GENERATION_CANCELLED", "Generation was cancelled after model loading.")
@@ -508,7 +561,7 @@ class ExternalServerBackend:
                     seed=seed,
                     on_phase=on_phase,
                 )
-                return {
+                response = {
                     **result,
                     "cold_start": None,
                     "model_load_seconds": None,
@@ -518,14 +571,24 @@ class ExternalServerBackend:
                     "max_output_tokens": runtime_plan["max_output_tokens"],
                     "thinking_budget_reduced": runtime_plan["thinking_budget_reduced"],
                     "external_server": True,
-                    "server_managed_lifecycle": True,
+                    "server_managed_lifecycle": not model_info.get("lifecycle_supported", False),
                 }
+                return response
             except ModelError:
                 raise
             except MemoryError as error:
                 raise ModelError("GENERATION_OOM", "GGUF generation ran out of memory.") from error
             except Exception as error:
-                raise ModelError("GENERATION_FAILED", "The GGUF model could not generate a prompt.", str(error)) from error
+                raise ModelError("GENERATION_FAILED", "The GGUF model could not generate a prompt.", self._redact(error)) from error
+            finally:
+                if model_info.get("lifecycle_supported") and (unload_after or self._unload_requested.is_set() or self.cancel_event.is_set()):
+                    try:
+                        self.router.transition(model_info["id"], False)
+                    except Exception as error:
+                        warning = self._redact(error)
+                        logging.getLogger(__name__).warning("External model cleanup failed: %s", warning)
+                        if response is not None:
+                            response["lifecycle_warning"] = "Prompt completed, but External model unload was not confirmed."
 
 
 BACKEND = ExternalServerBackend()

@@ -306,6 +306,12 @@ async def _apply_deferred_unload(
         return False
     resolved_family = resolved_model["family"]
     same_target = family == resolved_family
+    if family == "external":
+        if not model_id:
+            return False
+        _result, cancellation = await _run_thread_worker(backend.unload, model_id)
+        _propagate_worker_cancellation(cancellation)
+        return same_target and model_id == resolved_model.get("id")
     if same_target and family == "ollama":
         same_target = _ollama_target_matches(
             model_id,
@@ -485,9 +491,10 @@ async def get_status(request: web.Request) -> web.Response:
     family = state.get("selected_model_family")
     backend = BACKENDS.get(family, GGUF_BACKEND)
     ollama_status_call = OLLAMA_BACKEND.status if family == "ollama" else OLLAMA_BACKEND.retained_status
-    direct_status, ollama_status = await asyncio.gather(
+    direct_status, ollama_status, external_residency = await asyncio.gather(
         asyncio.to_thread(GGUF_BACKEND.status),
         asyncio.to_thread(ollama_status_call, ollama_host),
+        asyncio.to_thread(EXTERNAL_SERVER_BACKEND.router.snapshot),
     )
     comfyui_status = comfyui_runtime_snapshot(getattr(PromptServer.instance, "prompt_queue", None))
     if family == "gguf" or family is None:
@@ -507,6 +514,7 @@ async def get_status(request: web.Request) -> web.Response:
         "gpu_memory": gpu_memory_snapshot(),
         "comfyui": comfyui_status,
         "prompt_residency": {
+            "external": external_residency,
             "direct": {
                 "loaded": bool(direct_status.get("loaded")),
                 "model_id": direct_status.get("loaded_model_id"),
@@ -801,6 +809,11 @@ async def unload(request: web.Request) -> web.Response:
         except ModelError as error:
             return _error(error.code, error.message, status=400, details=error.details)
     backend = BACKENDS[family]
+    if family == "external":
+        try:
+            EXTERNAL_SERVER_BACKEND.router.target(model_id)
+        except ModelError as error:
+            return _error(error.code, error.message, status=400)
     with STATE_LOCK:
         active = STATE["active_request_id"] is not None
         active_family = STATE.get("selected_model_family")
@@ -808,7 +821,7 @@ async def unload(request: web.Request) -> web.Response:
         active_endpoint = STATE.get("selected_model_endpoint")
         if active and active_family is None:
             targeted_ollama_unload = family == "ollama" and (model_id is not None or ollama_host is not None)
-            if not targeted_ollama_unload:
+            if not targeted_ollama_unload and family != "external":
                 STATE["phase"] = "cancelling"
                 STATE["cancel_requested"] = True
             STATE["pending_unload_family"] = family
@@ -818,6 +831,15 @@ async def unload(request: web.Request) -> web.Response:
     active_same_target = active and active_family == family
     if active_same_target and family == "ollama":
         active_same_target = _ollama_target_matches(model_id, ollama_host, active_model_id, active_endpoint)
+    if family == "external":
+        try:
+            if active_same_target and model_id == active_model_id:
+                return web.json_response({"unload_requested": backend.request_unload(), "deferred": True})
+            _result, cancellation = await _run_thread_worker(backend.unload, model_id)
+            _propagate_worker_cancellation(cancellation)
+            return web.json_response({"unload_requested": True, "deferred": False})
+        except ModelError as error:
+            return _error(error.code, error.message, status=502, details=error.details)
     if active_same_target:
         request_unload = getattr(backend, "request_unload", None)
         if callable(request_unload):

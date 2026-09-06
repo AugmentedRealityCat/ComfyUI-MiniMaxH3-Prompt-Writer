@@ -340,9 +340,17 @@ test("VRAM handoff shares preparation without replacing native Queue semantics",
   });
   const failedA = app.queuePrompt(4);
   const failedB = app.queuePrompt(5);
-  assert.deepEqual(await Promise.all([failedA, failedB]), [false, false]);
+  assert.deepEqual(await Promise.all([failedA, failedB]), [true, true]);
   assert.equal(failures, 1);
-  assert.deepEqual(order, ["queue:1", "unload", "queue:2", "queue:3"]);
+  assert.deepEqual(order, ["queue:1", "unload", "queue:2", "queue:3", "queue:4", "queue:5"]);
+  installVramHandoff(app, {
+    isEnabled: () => true, timeoutMs: 5,
+    beforeQueue: () => new Promise(() => {}),
+    onError: () => { failures += 1; },
+  });
+  assert.equal(await app.queuePrompt(6), true);
+  assert.equal(failures, 2);
+  assert.equal(order.at(-1), "queue:6");
 });
 
 test("Queue invalidates Writer attempts synchronously and tracked requests remain awaitable", async () => {
@@ -967,17 +975,43 @@ test("External llama.cpp keeps reasoning under server control", () => {
   assert.match(stateSource, /state\.selectedModel\?\.family === "external" \? false : state\.thinking/);
 });
 
-test("External llama.cpp offers forward-only Auto VRAM in ComfyUI", () => {
+test("External llama.cpp offers capability-driven two-way Auto VRAM", () => {
   assert.match(mainSource, /\["gguf", "external"\]\.includes\(model\?\.family\)/);
-  assert.match(AUTO_VRAM_TOOLTIP, /External llama\.cpp remains server-managed/);
+  assert.match(AUTO_VRAM_TOOLTIP, /lifecycle-capable External llama\.cpp routers/);
 
-  const queueHandoffStart = mainSource.indexOf("async function unloadWriterModelsBeforeQueue()");
+  const queueHandoffStart = mainSource.indexOf("async function unloadWriterModelsBeforeQueue(signal)");
   const queueHandoffEnd = mainSource.indexOf("\nfunction showVramHandoffQueueError", queueHandoffStart);
   assert.ok(queueHandoffStart >= 0 && queueHandoffEnd > queueHandoffStart);
   const queueHandoffSource = mainSource.slice(queueHandoffStart, queueHandoffEnd);
   assert.match(queueHandoffSource, /activeFamily === "gguf"/);
   assert.match(queueHandoffSource, /activeFamily === "ollama"/);
-  assert.doesNotMatch(queueHandoffSource, /external|releaseExternal/i);
+  assert.match(queueHandoffSource, /activeFamily === "external" && studio\?\.selectedModel\?\.lifecycle_supported/);
+});
+
+test("verified router manual Unload stays visible across residency refreshes",()=>{
+  const start=mainSource.indexOf('function lifecycleTargets()'), end=mainSource.indexOf('function syncLifecycleActions',start);
+  const render=new Function('studio','escapeHtml',mainSource.slice(start,end)+'; return lifecycleTargets().map(t=>lifecycleButtonMarkup(t)).join("");');
+  const id='external::local::writer';
+  for (const [state,owned,enabled] of [['loaded',true,true],['sleeping',false,true],['loading',true,false],['unloading',true,false],['unloaded',false,false],['unknown',true,true],['unknown',false,false]]) {
+    const html=render({selectedModel:{id,family:'external',lifecycle_supported:true},promptResidency:{direct:null,ollama:[],external:[{model_id:id,state,writer_owned:owned}]}},String);
+    assert.equal((html.match(/data-lifecycle-family=/g)||[]).length,1);
+    assert.equal(html.includes(' disabled '),!enabled,state);
+  }
+  assert.match(render({selectedModel:{id,family:'external',lifecycle_supported:true},promptResidency:{direct:null,ollama:[],external:[]}},String),/disabled/);
+});
+
+test("External queue handoff waits for exact unloaded status and fails closed on lost status",async()=>{
+  const modelId='external::local::writer',target={family:'external',model_id:modelId},calls=[];
+  const status=state=>({prompt_residency:{external:{targets:[{model_id:modelId,state,writer_owned:true}]}}});
+  const samples=[status('loaded'),status('loading'),status('unloaded')];
+  const result=await unloadWriterModels({getStatus:async()=>samples.shift(),unloadModel:async t=>{calls.push(t);return {unload_requested:true};},sleep:async()=>{}});
+  assert.deepEqual(result,[target]);assert.deepEqual(calls,[target]);
+  await assert.rejects(()=>unloadWriterModels({
+    getStatus:async()=>status('unknown'),requiredTargets:[target],unloadModel:async()=>({unload_requested:true}),sleep:async()=>{},maxPolls:1,
+  }),error=>error.code==='WRITER_UNLOAD_TIMEOUT');
+  await assert.rejects(()=>unloadWriterModels({
+    getStatus:async()=>status('loaded'),unloadModel:async()=>({unload_requested:false}),
+  }),error=>error.code==='WRITER_UNLOAD_FAILED');
 });
 
 test("text-only Direct models expose only T2VA", () => {
@@ -1614,4 +1648,11 @@ test("startup generation state has no legacy preview dependency",()=>{
   const noop=()=>{},node={querySelector:()=>node,querySelectorAll:()=>[],classList:{toggle:noop},innerHTML:''};
   const studio={root:node,mode:'Reference'};
   new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop);
+});
+
+test("only confirmed Writer ownership makes unknown router state a release target",async()=>{
+  const status={prompt_residency:{external:{targets:[{model_id:'old',state:'unknown',writer_owned:false},{model_id:'other',state:'loaded',writer_owned:false}]}}};
+  assert.deepEqual(await unloadWriterModels({getStatus:async()=>status,unloadModel:async()=>assert.fail('no confirmed Writer residency')}),[]);
+  status.prompt_residency.external.targets[0].writer_owned=true;
+  assert.deepEqual(writerResidencyTargets(status),[{family:'external',model_id:'old'}]);
 });

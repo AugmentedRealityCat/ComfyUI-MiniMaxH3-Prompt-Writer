@@ -1,7 +1,7 @@
 const INSTALL_KEY = Symbol.for("minimax.h3.prompt.studio.vramHandoff");
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export const AUTO_VRAM_TOOLTIP = "Automatically frees ComfyUI VRAM before Prompt Writer generation. Direct GGUF and local Ollama also hand VRAM back before ComfyUI Queue; External llama.cpp remains server-managed.";
+export const AUTO_VRAM_TOOLTIP = "Automatically frees ComfyUI VRAM before Prompt Writer generation. Direct GGUF, local Ollama and lifecycle-capable External llama.cpp routers also release their selected models before ComfyUI Queue.";
 
 export function autoVramControlMarkup(supported) {
   if (!supported) return "";
@@ -22,6 +22,9 @@ export function writerResidencyTargets(status, ollamaHost = null) {
   const residency = status?.prompt_residency;
   const targets = [];
   if (residency?.direct?.loaded) targets.push({ family: "gguf", model_id: residency.direct.model_id || null });
+  for(const target of residency?.external?.targets || []){
+    if(target.model_id && target.writer_owned === true && ["loaded","loading","sleeping","unknown","unloading"].includes(target.state))targets.push({family:"external",model_id:target.model_id});
+  }
   const reportedTargets = Array.isArray(residency?.ollama?.targets)
     ? residency.ollama.targets
     : (Array.isArray(residency?.ollama?.models) ? residency.ollama.models.map((modelId) => ({ model_id: modelId, endpoint: ollamaHost })) : []);
@@ -39,6 +42,10 @@ export function writerResidencyTargets(status, ollamaHost = null) {
 
 function targetIsResident(status, target) {
   const residency = status?.prompt_residency;
+  if(target.family === "external"){
+    const match=residency?.external?.targets?.find(t=>t.model_id===target.model_id);
+    return !match || match.state !== "unloaded";
+  }
   if (target.family === "gguf") {
     if (!residency?.direct?.loaded) return false;
     return !target.model_id || residency.direct.model_id === target.model_id;
@@ -113,6 +120,8 @@ export async function unloadWriterModels({
   unloadModel,
   ollamaHost = null,
   onStatus = null,
+  requiredTargets = [],
+  signal = null,
   pollIntervalMs = 250,
   maxPolls = 60,
   sleep = wait,
@@ -120,7 +129,9 @@ export async function unloadWriterModels({
   let status = await getStatus(ollamaHost);
   onStatus?.(status);
   const targets = writerResidencyTargets(status, ollamaHost);
+  for (const target of requiredTargets) if (!targets.some(t => t.family === target.family && t.model_id === target.model_id)) targets.push(target);
   for (const target of targets) {
+    signal?.throwIfAborted();
     const result = await unloadModel(target);
     if (result?.unload_requested === false) throw handoffError("WRITER_UNLOAD_FAILED", "Prompt Writer could not unload its local model.");
   }
@@ -129,10 +140,11 @@ export async function unloadWriterModels({
   for (let attempt = 0; attempt <= maxPolls; attempt += 1) {
     status = await getStatus(ollamaHost);
     onStatus?.(status);
+    signal?.throwIfAborted();
     if (!targets.some((target) => targetIsResident(status, target))) return targets;
     if (attempt < maxPolls) await sleep(pollIntervalMs);
   }
-  throw handoffError("WRITER_UNLOAD_TIMEOUT", "Prompt Writer models are still using VRAM. The workflow was not queued.");
+  throw handoffError("WRITER_UNLOAD_TIMEOUT", "Prompt Writer could not confirm that its models released VRAM.");
 }
 
 export function createVramHandoffCoordinator() {
@@ -177,20 +189,29 @@ export function installVramHandoff(app, handlers) {
   const state = { handlers, original: app.queuePrompt, inFlight: null };
   state.wrapper = async function vramHandoffQueue(...args) {
     if (!state.handlers.isEnabled()) return state.original.apply(this, args);
-    state.handlers.onQueueRequested?.();
+    try { state.handlers.onQueueRequested?.(); } catch {}
     if (!state.inFlight) {
-      const handoff = Promise.resolve()
-        .then(() => state.handlers.beforeQueue())
-        .then(() => true, (error) => {
-          state.handlers.onError(error);
-          return false;
-        });
+      let timer;
+      const controller = new AbortController();
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(handoffError("WRITER_HANDOFF_TIMEOUT", "Auto VRAM release timed out. Queue will continue."));
+        }, state.handlers.timeoutMs ?? 20000);
+      });
+      const handoff = Promise.race([
+        Promise.resolve().then(() => state.handlers.beforeQueue(controller.signal)),
+        timeout,
+      ]).catch((error) => {
+        try { state.handlers.onError?.(error); } catch {}
+      });
       state.inFlight = handoff.finally(() => {
+        clearTimeout(timer);
         state.inFlight = null;
-        state.handlers.onQueueHandoffEnd?.();
+        try { state.handlers.onQueueHandoffEnd?.(); } catch {}
       });
     }
-    if (!await state.inFlight) return false;
+    await state.inFlight;
     return state.original.apply(this, args);
   };
   app[INSTALL_KEY] = state;

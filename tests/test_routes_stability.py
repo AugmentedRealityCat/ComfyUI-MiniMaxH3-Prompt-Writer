@@ -76,6 +76,33 @@ class _MultipartRequest(_Request):
 class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
     session_id = "11111111-2222-4333-8444-555555555555"
 
+    async def test_external_unload_requires_a_known_exact_target(self):
+        with patch.object(routes.EXTERNAL_SERVER_BACKEND, "unload") as unload:
+            response = await routes.unload(_Request(body={"family": "external"}))
+        self.assertEqual(response.status, 400)
+        unload.assert_not_called()
+
+    async def test_external_unload_stops_only_matching_active_model(self):
+        backend = routes.EXTERNAL_SERVER_BACKEND
+        routes.STATE.update(active_request_id="request", selected_model_family="external", selected_model_id="writer-a")
+        with patch.object(backend.router, "target"), patch.object(backend, "request_unload", return_value=True) as stop, patch.object(backend, "unload") as unload:
+            response = await routes.unload(_Request(body={"family": "external", "model_id": "writer-a"}))
+            self.assertTrue(self.payload(response)["deferred"])
+            stop.assert_called_once()
+            unload.assert_not_called()
+            stop.reset_mock()
+            response = await routes.unload(_Request(body={"family": "external", "model_id": "writer-b"}))
+            self.assertFalse(self.payload(response)["deferred"])
+            stop.assert_not_called()
+            unload.assert_called_once_with("writer-b")
+
+    async def test_external_deferred_unload_does_not_cancel_unrelated_resolved_model(self):
+        with patch.object(routes.EXTERNAL_SERVER_BACKEND, "unload") as unload:
+            cancelled = await routes._apply_deferred_unload("external", "writer-a", {"family": "external", "id": "writer-b"})
+            self.assertFalse(cancelled)
+            unload.assert_called_once_with("writer-a")
+
+
     def setUp(self):
         routes.STATE.update({
             "phase": "idle",
@@ -144,6 +171,8 @@ class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
         ollama = {"ollama_running": False, "writer_retained_models": []}
         targets = [{"endpoint": "http://127.0.0.1:11434", "model_id": "gemma4:test"}]
         with (
+            patch.object(routes.EXTERNAL_SERVER_BACKEND.router, "residency", side_effect=AssertionError("Status must not wait on router HTTP")),
+            patch.object(routes.EXTERNAL_SERVER_BACKEND.router, "snapshot", return_value={"targets":[]}),
             patch.object(routes.GGUF_BACKEND, "status", return_value=direct),
             patch.object(routes.OLLAMA_BACKEND, "retained_status", return_value=ollama),
             patch.object(routes.OLLAMA_BACKEND, "retained_targets", return_value=targets),

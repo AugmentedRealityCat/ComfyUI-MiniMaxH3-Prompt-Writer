@@ -173,6 +173,7 @@ class ExternalServerBackendTests(unittest.TestCase):
     def test_probe_returns_external_multimodal_model(self):
         model = self.backend.probe_model({"url": self.url})
         self.assertEqual(model["family"], "external")
+        self.assertFalse(model["lifecycle_supported"])
         self.assertEqual(model["remote_model"], "gemma-test.gguf")
         self.assertEqual(model["server_context_tokens"], 16384)
         self.assertTrue(model["capabilities"]["images"])
@@ -454,7 +455,9 @@ class ExternalServerBackendTests(unittest.TestCase):
         self.assertFalse(issubclass(ExternalServerBackend, GGUFBackend))
         self.assertTrue(self.backend.externally_managed)
         self.assertTrue(model["externally_managed"])
-        self.assertFalse(hasattr(self.backend, "unload"))
+        self.assertFalse(model["lifecycle_supported"])
+        with self.assertRaises(ModelError):
+            self.backend.unload(model["id"])
         self.assertEqual(self.backend.probe_model({"url": self.url})["remote_model"], "gemma-test.gguf")
 
     def test_cancel_interrupts_stream_without_stopping_remote_server(self):
