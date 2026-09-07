@@ -125,6 +125,7 @@ export function createMediaComposer({
   };
 
   const state = {
+    openGeneration: 0,
     assets: [], assetMap:new Map(), visuals:new Map(), visualPromises:new Map(), items:[], selectedUid:null,
     captionEdit:null, captionEditOrig:"", canvasW:BASE_W, canvasH:BASE_H, drag:null, open:false, returnFocus:null,
     zoom:1, panX:0, panY:0, visualRevision:0,
@@ -583,13 +584,23 @@ export function createMediaComposer({
   }
 
   async function addPicture() {
-    if(!state.items.length||dom.add.disabled)return;
-    dom.add.disabled=true;
+    if (!state.items.length || dom.add.disabled) return;
+    const openGeneration = state.openGeneration;
+    dom.add.disabled = true;
     try {
-      const payload=await exportPicture();
+      const payload = await exportPicture();
+      if (!state.open || state.openGeneration !== openGeneration) return;
       await onAddPicture(payload);
-      state.items=[];state.selectedUid=null;normalizeCanvas();close();
-    } catch (error) { notify("error",error?.message||String(error)); renderPreview(); }
+      if (!state.open || state.openGeneration !== openGeneration) return;
+      state.items = [];
+      state.selectedUid = null;
+      normalizeCanvas();
+      close();
+    } catch (error) {
+      if (!state.open || state.openGeneration !== openGeneration) return;
+      notify("error", error?.message || String(error));
+      renderPreview();
+    }
   }
   dom.copy.addEventListener("click",copyPicture);
   dom.download.addEventListener("click",downloadPicture);
@@ -609,6 +620,7 @@ export function createMediaComposer({
 
   function open({assets=[],trigger=null}={}) {
     if(state.open)return;
+    state.openGeneration++;
     setAssets(assets);state.zoom=1;state.panX=state.panY=0;
     const controls=$("[data-shell-controls]"),closeButton=controls.querySelector("[data-close]");
     for(const selector of ["[data-theme-toggle]","[data-interface-size-picker]","[data-fullscreen-toggle]"]){

@@ -620,7 +620,7 @@ function bindMediaActions(mode) {
       try {
         const result = await removeMedia(studio.sessionId, button.dataset.removeAsset);
         studio.assets = result.assets;
-        renderMedia(mode);
+        renderMedia(studio.mode);
       } catch (error) {
         showToast(error.code || "Remove failed", error.message, error.details);
       }
@@ -693,7 +693,7 @@ function bindMediaActions(mode) {
       try {
         const result = await reorderMedia(studio.sessionId, mode, reorderedAssets.map((asset) => asset.id));
         studio.assets = result.assets;
-        renderMedia(mode);
+        renderMedia(studio.mode);
       } catch (error) {
         showToast(error.code || "Reorder failed", error.message, error.details);
       }
@@ -741,9 +741,9 @@ async function uploadFiles(mode, files, replaceAssetId = null) {
         { durationMs: 6000 },
       );
     }
-    renderMedia(mode);
+    renderMedia(studio.mode);
   } catch (error) {
-    renderMedia(mode);
+    renderMedia(studio.mode);
     showToast(error.code || "Upload failed", error.message, error.details);
   }
 }
@@ -861,7 +861,14 @@ async function clearCurrentMedia({ notify = true } = {}) {
 }
 
 async function clearEverything() {
+  const mode = studio.mode;
+  const submittedDraft = currentDraftFields();
   if (!await clearCurrentMedia({ notify: false })) return;
+  const currentDraft = currentDraftFields();
+  if (studio.mode !== mode || currentDraft.brief !== submittedDraft.brief || currentDraft.prompt !== submittedDraft.prompt) {
+    showToast("Media cleared", "Your current prompts were kept because the workspace changed.");
+    return;
+  }
   clearCurrentPrompts({ notify: false });
   const detail = studio.mode === "Music3"
     ? "Media, Music Brief and generated caption were removed. Lyrics were kept."
@@ -1359,9 +1366,11 @@ async function startGenerationPreview() {
   markActiveWriterRequest();
   const generationDetail = external ? `${modelName} · the server may load its model if idle` : apiProvider ? `${modelName} · ${studio.selectedModel.api_preset}` : modelName;
   setGenerationState("busy", remote ? "Contacting provider" : "Loading model", generationDetail);
+  let pollingActive = true;
   studio.statusTimer = setInterval(async () => {
     try {
       const status = await getStatus(studio.ollamaHost);
+      if (!pollingActive) return;
       const labels = { loading_model: remote ? "Contacting provider" : "Loading model", processing_media: "Processing references", generating: "Generating", cancelling: "Cancelling" };
       if (labels[status.phase]) setGenerationState("busy", labels[status.phase], generationDetail);
     } catch {}
@@ -1427,6 +1436,7 @@ async function startGenerationPreview() {
       showToast(error.code || "Generation failed", error.message, error.details);
     }
   } finally {
+    pollingActive = false;
     clearInterval(studio.statusTimer);
     studio.statusTimer = null;
     try {
@@ -2672,6 +2682,10 @@ async function submitLyricsRefinement() {
       creativeBrief: musicBrief,
       seed: newGenerationSeed(),
     })));
+    if (lyrics.value !== currentLyrics) {
+      showToast("Lyrics kept", "The rewrite was not applied because you edited the Lyrics.");
+      return;
+    }
     studio.lyricsRestore = { lyrics: currentLyrics };
     lyrics.value = result.prompt;
     const restore = panel.querySelector("[data-lyrics-refine-restore]");
@@ -2735,6 +2749,10 @@ async function submitRefinement() {
       lyrics: studio.mode === "Music3" ? studio.root.querySelector("[data-music-lyrics]").value : "",
       seed: newGenerationSeed(),
     })));
+    if (output.value !== previousPrompt) {
+      showToast("Prompt kept", "The rewrite was not applied because you edited the prompt.");
+      return;
+    }
     studio.refineRestore = {
       prompt: previousPrompt,
       meta: previousMeta,
@@ -2744,7 +2762,9 @@ async function submitRefinement() {
     output.value = result.prompt;
     studio.lastModelPrompt = result.prompt;
     renderPromptHighlights();
-    panel.querySelector("textarea").value = "";
+    if (panel.querySelector("textarea").value.trim() === instruction) {
+      panel.querySelector("textarea").value = "";
+    }
     panel.querySelector("[data-refine-restore]").hidden = false;
     studio.lastModelMeta = formatGenerationMeta(result);
     syncRuntimeSummary(result);
