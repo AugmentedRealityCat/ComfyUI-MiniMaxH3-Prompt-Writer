@@ -385,6 +385,7 @@ function icon(name, size = 16) {
     chevron: '<path d="m9 18 6-6-6-6"/>',
     copy: '<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
     play: '<path d="m9 7 8 5-8 5V7Z" fill="currentColor" stroke="none"/>',
+    pause: '<path d="M8 6v12M16 6v12" stroke-width="3"/>',
     check: '<path d="m5 12 4 4L19 6"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
     refresh: '<path d="M20 11a8 8 0 1 0-2.35 5.65L20 14"/><path d="M20 7v4h-4"/>',

@@ -31,9 +31,13 @@ function fixture(t, options={}){
     }
     querySelector(s){return this.querySelectorAll(s)[0]||null;}
     set innerHTML(html){
+      this.html=html;
       this.firstElementChild=new Element('section');
       this.firstElementChild.nodes=[...html.matchAll(/<([a-z]+)\b([^>]*)>/g)].map(([,tag,attrs])=>new Element(tag,attrs));
+      const playback=this.firstElementChild.querySelector('[data-ed-play]');
+      if(playback)playback.html=html.match(/<button[^>]*data-ed-play\b[^>]*>([\s\S]*?)<\/button>/)?.[1]||'';
     }
+    get innerHTML(){return this.html||'';}
     addEventListener(k,fn){this.handlers[k]=fn;}
     removeEventListener(){}
     setAttribute(k,v){this.attrs[k]=v;}
@@ -59,7 +63,7 @@ function fixture(t, options={}){
     source:{width:544,height:960,duration:8},source_url:'source',contact_sheet_url:'applied-0',frames:Array(6),frame_count_mode:'auto'};
   Object.assign(asset, options.asset);
   const calls=[],saved=[],errors=[],opened=[],pictures=[];
-  const editor=createMediaEditor({root,icon:()=>'',notify:m=>errors.push(m),onOpenChange:v=>opened.push(v),onSaved:r=>saved.push(r),
+  const editor=createMediaEditor({root,icon:name=>`<svg data-icon="${name}"></svg>`,notify:m=>errors.push(m),onOpenChange:v=>opened.push(v),onSaved:r=>saved.push(r),
     onAddFrame:async(blob,name)=>pictures.push({blob,name}),
     request:async(id,body)=>{
       calls.push(body);
@@ -73,6 +77,30 @@ function fixture(t, options={}){
   $('[data-ed-video]').onloadeddata();
   return {editor,$,calls,saved,errors,opened,root,pictures};
 }
+
+test('playback control follows native play, pause and ended events',t=>{
+  const f=fixture(t);
+  const video=f.$('[data-ed-video]');
+  const control=f.$('[data-ed-play]');
+  const assertState=(name,pressed)=>{
+    assert.match(control.innerHTML,new RegExp(`data-icon="${name}"`));
+    assert.equal(control.attrs['aria-pressed'],String(pressed));
+    assert.equal(control.attrs['aria-label'],pressed?'Pause':'Play');
+  };
+  assert.match(control.innerHTML,/data-icon="play"/);
+  assert.equal(typeof video.onplay,'function','native play must update the control');
+  video.paused=false;
+  video.onplay();
+  assertState('pause',true);
+  video.paused=true;
+  video.onpause();
+  assertState('play',false);
+  video.paused=false;
+  video.onplay();
+  video.ended=true;
+  video.onended();
+  assertState('play',false);
+});
 
 test('editor changes stay local; Apply updates model view and keeps the editor open',async t=>{
   const f=fixture(t);

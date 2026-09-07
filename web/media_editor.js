@@ -96,7 +96,19 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     });queue=next;return next;
   }
   function setBusy(value){busy=value;el.classList.toggle('is-busy',value);$$('button,input,select').forEach(c=>{if(!c.closest('[data-ed-shell]'))c.disabled=value});sync();}
-  function stop(){video.pause();cancelAnimationFrame(raf);$('[data-ed-play]').setAttribute('aria-pressed','false');}
+  function syncPlaybackControl() {
+    const playing = !video.paused && !video.ended;
+    const control = $('[data-ed-play]');
+    control.innerHTML = icon(playing ? 'pause' : 'play', 20);
+    control.setAttribute('aria-pressed', String(playing));
+    control.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    control.title = playing ? 'Pause' : 'Play';
+  }
+  function stop() {
+    video.pause();
+    cancelAnimationFrame(raf);
+    syncPlaybackControl();
+  }
   function position(){
     if(!source)return;
     const k=Math.min(Math.max(1,stage.clientWidth-16)/source.width,Math.max(1,stage.clientHeight-16)/source.height);
@@ -176,7 +188,7 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     if(busy||loading||!mediaReady)return;
     if(!video.paused){stop();return;}
     decoded.hidden=true;if(video.currentTime<edit.start||video.currentTime>=edit.end)video.currentTime=edit.start;
-    video.play().then(()=>{$('[data-ed-play]').setAttribute('aria-pressed','true');tick();}).catch(error=>notify(error.message));
+    video.play().then(()=>{tick();}).catch(error=>notify(error.message));
   }
   function tick(){if(!asset||video.paused)return;if(video.currentTime>=edit.end){if(loop)video.currentTime=edit.start;else{stop();video.currentTime=edit.end;syncTime();return;}}syncTime();raf=requestAnimationFrame(tick);}
   function ended(){if(loop&&asset){video.currentTime=edit.start;play();}else stop();}
@@ -228,6 +240,8 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
   box.onpointerup=box.onpointercancel=()=>{drag=null;};
   box.onkeydown=e=>{if(busy||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const step=e.shiftKey?10:1;edit.crop=cropRect({...edit.crop,x:edit.crop.x+(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0),y:edit.crop.y+(e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0)},source.width,source.height,snap);changed();};
   $('[data-ed-play]').onclick=play;video.ontimeupdate=syncTime;video.onended=ended;
+  video.onplay = syncPlaybackControl;
+  video.onpause = syncPlaybackControl;
   $('[data-ed-loop]').onchange=e=>{loop=e.target.checked;};
   $$('[data-ed-step]').forEach(b=>b.onclick=()=>seek(video.currentTime,Number(b.dataset.edStep)));
   $('[data-ed-in]').onclick=()=>setTrim(Math.min(video.currentTime,edit.end-.001),edit.end);
