@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
+import logging
 import shutil
 import socket
 import sys
@@ -679,6 +680,7 @@ class OllamaBackend:
                 model_info, assembled,
                 context_profile=context_profile, kv_cache=kv_cache, thinking=thinking,
             )
+            response = None
             try:
                 cold_start = not any(
                     str(item.get("model") or item.get("name")) == self.model_name
@@ -700,7 +702,7 @@ class OllamaBackend:
                     seed=seed,
                     on_phase=on_phase,
                 )
-                return {
+                response = {
                     **result,
                     "cold_start": cold_start,
                     "model_load_seconds": round(self._last_load_duration / 1_000_000_000, 3),
@@ -711,19 +713,29 @@ class OllamaBackend:
                     "thinking_budget_reduced": runtime_plan["thinking_budget_reduced"],
                     "ollama": True,
                 }
+                return response
             except ModelError:
                 raise
             except Exception as error:
                 raise ModelError("GENERATION_FAILED", "Ollama could not generate a prompt.", str(error)) from error
             finally:
-                active_error = sys.exc_info()[0] is not None
+                active_error = sys.exc_info()[1]
                 force_unload = self.force_unload_event.is_set()
                 if unload_after or force_unload:
                     try:
                         self.unload(endpoint=endpoint)
-                    except ModelError:
-                        if not active_error:
-                            raise
+                    except Exception as cleanup_error:
+                        warning = f"Ollama could not unload the model: {cleanup_error}"
+                        logging.getLogger(__name__).warning(warning)
+                        with self._retained_lock:
+                            self._retained_for(endpoint).add(self.model_name)
+                        if response is not None:
+                            response["lifecycle_warning"] = warning
+                        if isinstance(active_error, ModelError):
+                            details = active_error.details
+                            if not isinstance(details, dict):
+                                details = {"primary_detail": details}
+                            active_error.details = {**details, "cleanup_warning": warning}
                 elif self.model_name:
                     with self._retained_lock:
                         self._retained_for(endpoint).add(self.model_name)

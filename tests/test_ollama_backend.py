@@ -453,6 +453,35 @@ class OllamaBackendTests(unittest.TestCase):
         self.assertEqual(error.exception.code, "OLLAMA_STREAM_ERROR")
         self.assertTrue(any(path == "/api/generate" and payload["keep_alive"] == 0 for _, path, payload in _FakeOllamaHandler.requests))
 
+    def test_cleanup_failure_preserves_primary_result_and_rechecks_residency(self):
+        model = self._model()
+        for generation_fails in (False, True):
+            for cleanup_fails in (False, True):
+                with self.subTest(generation_fails=generation_fails, cleanup_fails=cleanup_fails):
+                    self.backend.prepare_request()
+                    primary = ModelError("GENERATION_FAILED", "primary error")
+                    cleanup = ModelError("OLLAMA_REQUEST_FAILED", "unload failed")
+                    with patch("backend.models.ollama_backend.run_h3_pipeline", return_value={"prompt": "OK"}, side_effect=primary if generation_fails else None), patch.object(
+                        self.backend, "unload", side_effect=cleanup if cleanup_fails else None,
+                    ):
+                        if generation_fails:
+                            with self.assertRaises(ModelError) as raised:
+                                self.backend.generate(model, self._assembled(), "session", thinking=False, seed=1, unload_after=True)
+                            self.assertIs(raised.exception, primary)
+                            if cleanup_fails:
+                                self.assertIsInstance(primary.details, dict)
+                                self.assertIn("cleanup_warning", primary.details)
+                        else:
+                            result = self.backend.generate(model, self._assembled(), "session", thinking=False, seed=1, unload_after=True)
+                            self.assertEqual(result["prompt"], "OK")
+                            self.assertEqual(bool(result.get("lifecycle_warning")), cleanup_fails)
+                    if cleanup_fails:
+                        self.assertIn({"endpoint": self.url, "model_id": model["remote_model"]}, self.backend.retained_targets())
+                        with patch.object(self.backend, "_running_models", return_value=[]) as running:
+                            self.backend.status(self.url)
+                            running.assert_called_once_with(self.url)
+                            self.assertEqual(self.backend.retained_targets(), [])
+
     def test_keep_loaded_skips_final_unload(self):
         model = self._model()
         plan = self.backend.preflight(model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=False)

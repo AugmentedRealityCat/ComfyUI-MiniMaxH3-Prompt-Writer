@@ -171,12 +171,12 @@ class _ApiChatHandler:
         temperature: float,
         top_p: float,
         top_k: int,
-        max_tokens: int,
+        max_tokens: int | None,
         seed: int | None,
         thinking: bool,
         **_unused: Any,
     ) -> dict[str, Any]:
-        del top_k, seed
+        del top_k, seed, max_tokens
         payload: dict[str, Any] = {
             "model": self.model_id,
             "messages": messages,
@@ -186,10 +186,9 @@ class _ApiChatHandler:
         if preset in {"openai", "gemini", "openrouter"}:
             payload["stream_options"] = {"include_usage": True}
         if preset == "openai":
-            payload["max_completion_tokens"] = max_tokens
             payload["store"] = False
-        else:
-            payload["max_tokens"] = max_tokens
+        # Output limits belong to the provider/runtime. In particular, the
+        # pipeline's non-thinking and repair budgets are not API request caps.
         # New OpenAI reasoning models and Gemini 3.6+ reject or deprecate
         # sampling controls. Keep those presets on the smallest portable set.
         if not thinking and preset in {"openrouter", "custom"}:
@@ -201,13 +200,10 @@ class _ApiChatHandler:
             # provider policy and becomes stale as models change.
             effort = self.connection.reasoning_effort
             payload["reasoning_effort"] = effort
-            payload.pop("max_tokens", None)
         elif thinking and preset == "openai":
             payload["reasoning_effort"] = "low"
         elif thinking and preset == "openrouter":
             payload["reasoning"] = {"enabled": True, "exclude": True}
-        elif preset == "custom" and self.connection.compatibility_profile == "lm_studio":
-            payload["reasoning_effort"] = "low" if thinking else "none"
         return self.backend._request_chat_completion_stream(self.connection, payload)
 
 
@@ -706,7 +702,6 @@ class ApiProviderBackend:
                     "suggestion": "Choose a larger-context API model or remove references.",
                 },
             )
-        max_output_tokens = min(desired_output, available_output)
         return {
             "requested_context_profile": "auto",
             "context_profile": "provider",
@@ -717,9 +712,9 @@ class ApiProviderBackend:
             "estimated_text_tokens": estimated_text_tokens,
             "estimated_input_tokens": estimated_input_tokens,
             "visual_input_count": visual_input_count,
-            "max_output_tokens": max_output_tokens,
-            "reserved_output_tokens": max_output_tokens + CONTEXT_SAFETY_TOKENS,
-            "thinking_budget_reduced": thinking and max_output_tokens < THINKING_OUTPUT_TOKENS,
+            "max_output_tokens": None,
+            "reserved_output_tokens": CONTEXT_SAFETY_TOKENS,
+            "thinking_budget_reduced": False,
             "context_limit_known": known_context is not None,
         }
 

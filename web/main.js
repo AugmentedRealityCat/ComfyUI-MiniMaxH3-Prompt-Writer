@@ -1409,7 +1409,7 @@ async function startGenerationPreview() {
       ];
       showToast(studio.mode === "Music3" ? "Caption generated" : "Prompt generated", details.filter(Boolean).join(" · "));
     }
-    if (result.lifecycle_warning) showToast("External cleanup", result.lifecycle_warning, null, null, {dismissOnWorkspaceClick:true});
+    if (result.lifecycle_warning) showToast("Model cleanup", result.lifecycle_warning, null, null, {dismissOnWorkspaceClick:true});
   } catch (error) {
     if (error.code === "GENERATION_CANCELLED") {
       showToast("Generation cancelled", "The active request stopped.");

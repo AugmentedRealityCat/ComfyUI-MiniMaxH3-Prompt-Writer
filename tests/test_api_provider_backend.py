@@ -312,7 +312,7 @@ class ApiProviderBackendTests(unittest.TestCase):
             thinking=False,
         )
         payload = _FakeApiHandler.requests[-1][3]
-        self.assertEqual(payload["reasoning_effort"], "none")
+        self.assertNotIn("reasoning_effort", payload)
 
     def test_only_session_credentials_are_accepted(self):
         self.assertEqual(
@@ -353,7 +353,7 @@ class ApiProviderBackendTests(unittest.TestCase):
         self.assertEqual(response["choices"][0]["message"]["content"], "API_OK")
         payload = _FakeApiHandler.requests[-1][3]
         self.assertEqual(payload["messages"], messages)
-        self.assertEqual(payload["max_tokens"], 2048)
+        self.assertNotIn("max_tokens", payload)
         self.assertEqual(payload["reasoning"], {"enabled": True, "exclude": True})
         self.assertNotIn("top_k", payload)
         self.assertNotIn("seed", payload)
@@ -394,7 +394,20 @@ class ApiProviderBackendTests(unittest.TestCase):
         self.assertEqual(self.backend._usage_sources, ["reported", "reported"])
         self.assertNotIn("secret-test-key", json.dumps(posts[1][3]))
 
-    def test_openai_adapter_uses_max_completion_tokens_and_store_false(self):
+    def test_auto_budget_does_not_send_pipeline_caps_to_any_provider(self):
+        for preset, profile in (("openai", "generic"), ("openrouter", "generic"), ("gemini", "generic"), ("custom", "generic"), ("custom", "lm_studio")):
+            for thinking in (False, True):
+                with self.subTest(preset=preset, profile=profile, thinking=thinking):
+                    connection = self._connection(preset=preset, compatibility_profile=profile)
+                    handler = _ApiChatHandler(self.backend, connection, "plain-model")
+                    handler(messages=[], temperature=1.0, top_p=0.95, top_k=64, max_tokens=2048, seed=1, thinking=thinking)
+                    payload = _FakeApiHandler.requests[-1][3]
+                    self.assertNotIn("max_tokens", payload)
+                    self.assertNotIn("max_completion_tokens", payload)
+                    if profile == "lm_studio":
+                        self.assertNotIn("reasoning_effort", payload)
+
+    def test_openai_adapter_uses_provider_budget_and_store_false(self):
         connection = self._connection(preset="openai")
         handler = _ApiChatHandler(self.backend, connection, "plain-model")
         handler(
@@ -407,7 +420,7 @@ class ApiProviderBackendTests(unittest.TestCase):
             thinking=False,
         )
         payload = _FakeApiHandler.requests[-1][3]
-        self.assertEqual(payload["max_completion_tokens"], 1536)
+        self.assertNotIn("max_completion_tokens", payload)
         self.assertFalse(payload["store"])
         self.assertEqual(payload["stream_options"], {"include_usage": True})
         self.assertNotIn("max_tokens", payload)
@@ -520,7 +533,7 @@ class ApiProviderBackendTests(unittest.TestCase):
         plan = self.backend.preflight(model, assembled, context_profile="auto", kv_cache="auto", thinking=False)
         self.assertEqual(plan["kv_cache"], "provider")
         self.assertEqual(plan["context_profile"], "provider")
-        self.assertEqual(plan["max_output_tokens"], 2_048)
+        self.assertIsNone(plan["max_output_tokens"])
         music_plan = self.backend.preflight(
             model,
             {**assembled, "input": {"mode": "Music3"}},
@@ -528,7 +541,7 @@ class ApiProviderBackendTests(unittest.TestCase):
             kv_cache="auto",
             thinking=False,
         )
-        self.assertEqual(music_plan["max_output_tokens"], 1_536)
+        self.assertIsNone(music_plan["max_output_tokens"])
         with self.assertRaises(ModelError) as runtime:
             self.backend.preflight(model, assembled, context_profile="low", kv_cache="auto", thinking=False)
         self.assertEqual(runtime.exception.code, "API_RUNTIME_MANAGED")
