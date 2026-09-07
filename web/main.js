@@ -2004,6 +2004,7 @@ async function refreshGGUFRuntimeDiagnostics(force = false) {
 }
 
 function selectSettingsProvider(provider) {
+  studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
   setOtherModelsPopover(false);
   rememberRuntimePreferences();
   studio.settingsProvider = ["direct", "external", "ollama", "api"].includes(provider) ? provider : "direct";
@@ -2044,6 +2045,7 @@ function selectSettingsProvider(provider) {
 }
 
 function selectModel(model, { preserveSettingsProvider = false } = {}) {
+  studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
   rememberRuntimePreferences();
   selectModelState(studio, model, { preserveSettingsProvider });
   const switchedToT2VA = !isGenerationModeAvailable(model, studio.mode);
@@ -2314,6 +2316,10 @@ function syncOllamaAutoDetection() {
 }
 
 async function connectExternalServer(form) {
+  studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
+  const attempt = (studio.externalConnectionAttempt || 0) + 1;
+  studio.externalConnectionAttempt = attempt;
+  const selectionRevision = studio.modelSelectionRevision || 0;
   const submit = form.querySelector('[type="submit"]');
   const config = {
     url: form.elements.url.value.trim(),
@@ -2324,6 +2330,7 @@ async function connectExternalServer(form) {
   submit.textContent = "Connecting…";
   try {
     const result = await probeExternalServer(config);
+    if (studio.externalConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     const saved = { url: result.model.endpoint, model: result.model.remote_model };
     studio.externalServerConfig = saved;
     studio.externalServerError = null;
@@ -2335,16 +2342,20 @@ async function connectExternalServer(form) {
       ? ` · ${Math.round(result.model.server_context_tokens / 1024)}K context` : "";
     showToast("llama.cpp connected", `${result.model.name}${context}`);
   } catch (error) {
+    if (studio.externalConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     studio.externalServerError = error;
     showToast(error.code || "Connection failed", error.message, error.details);
     renderInferenceSettings();
   } finally {
-    submit.disabled = false;
-    submit.textContent = "Connect";
+    if (studio.externalConnectionAttempt === attempt) {
+      submit.disabled = false;
+      submit.textContent = "Connect";
+    }
   }
 }
 
 function disconnectExternalServer() {
+  studio.externalConnectionAttempt = (studio.externalConnectionAttempt || 0) + 1;
   const wasSelected = studio.selectedModel?.family === "external";
   studio.externalServerConfig = null;
   studio.externalServerError = null;
@@ -2360,6 +2371,10 @@ function disconnectExternalServer() {
 }
 
 async function connectConfiguredApiProvider(form) {
+  studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
+  const attempt = (studio.apiConnectionAttempt || 0) + 1;
+  studio.apiConnectionAttempt = attempt;
+  const selectionRevision = studio.modelSelectionRevision || 0;
   const submit = form.querySelector('[type="submit"]');
   const contextValue = Number(form.elements.custom_context_tokens?.value || 0);
   const config = {
@@ -2389,6 +2404,12 @@ async function connectConfiguredApiProvider(form) {
         reasoning_effort: config.gemini_reasoning_effort,
       },
     });
+    if (studio.apiConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) {
+      if (result.connection.id !== studio.apiProviderConnection?.id) {
+        await disconnectApiProvider(result.connection.id).catch(() => {});
+      }
+      return;
+    }
     if (studio.apiProviderConnection?.id && studio.apiProviderConnection.id !== result.connection.id) {
       disconnectApiProvider(studio.apiProviderConnection.id).catch(() => {});
     }
@@ -2410,23 +2431,22 @@ async function connectConfiguredApiProvider(form) {
       model ? `${model.name} · ${model.capabilities?.images ? "vision ready" : "text only or vision unknown"}${result.connection.connection_verified ? "" : " · endpoint unverified"}` : "Connected. Enter an exact model ID or refresh the model list.",
     );
   } catch (error) {
+    if (studio.apiConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     studio.apiProviderError = error;
     showToast(error.code || "API connection failed", error.message, error.details);
     renderInferenceSettings();
   } finally {
-    submit.disabled = false;
-    submit.textContent = "Connect & test";
+    if (studio.apiConnectionAttempt === attempt) {
+      submit.disabled = false;
+      submit.textContent = "Connect & test";
+    }
   }
 }
 
 async function disconnectConfiguredApiProvider({ announce = true } = {}) {
+  studio.apiConnectionAttempt = (studio.apiConnectionAttempt || 0) + 1;
   const connection = studio.apiProviderConnection;
   const wasSelected = studio.selectedModel?.family === "api";
-  if (connection?.id) {
-    try {
-      await disconnectApiProvider(connection.id);
-    } catch {}
-  }
   studio.apiProviderConnection = null;
   studio.apiProviderModels = [];
   studio.apiProviderError = null;
@@ -2437,11 +2457,17 @@ async function disconnectConfiguredApiProvider({ announce = true } = {}) {
   syncRuntimeSummary();
   saveUserPreferences(localStorage, studio);
   if (announce) showToast("API provider disconnected", "The session credential was removed from backend memory.");
+  if (connection?.id) {
+    try {
+      await disconnectApiProvider(connection.id);
+    } catch {}
+  }
 }
 
 async function chooseApiProviderPreset(preset) {
   if (!API_PROVIDER_UI[preset] || preset === studio.apiProviderConfig.preset) return;
-  if (studio.apiProviderConnection) await disconnectConfiguredApiProvider({ announce: false });
+  // Invalidate pending attempts even before the first connection exists.
+  void disconnectConfiguredApiProvider({ announce: false });
   studio.apiProviderConfig = {
     ...studio.apiProviderConfig,
     preset,
@@ -2458,8 +2484,12 @@ async function chooseApiProviderPreset(preset) {
 
 async function refreshApiProviderModels() {
   if (!studio.apiProviderConnection) return;
+  const attempt = (studio.apiConnectionAttempt || 0) + 1;
+  studio.apiConnectionAttempt = attempt;
+  const selectionRevision = studio.modelSelectionRevision || 0;
   try {
     const result = await getApiProviderModels(studio.apiProviderConnection.id);
+    if (studio.apiConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     const selectedRemote = studio.selectedModel?.family === "api" ? studio.selectedModel.remote_model : studio.apiProviderConfig.model_id;
     studio.apiProviderConnection = result.connection;
     studio.apiProviderModels = result.models || [];
@@ -2469,12 +2499,17 @@ async function refreshApiProviderModels() {
     else renderInferenceSettings();
     showToast("API models refreshed", `${studio.apiProviderModels.length} model${studio.apiProviderModels.length === 1 ? "" : "s"} reported.`);
   } catch (error) {
+    if (studio.apiConnectionAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     studio.apiProviderError = error;
     showToast(error.code || "Model refresh failed", error.message, error.details);
   }
 }
 
 async function refreshModels() {
+  const attempt = (studio.modelDiscoveryAttempt || 0) + 1;
+  studio.modelDiscoveryAttempt = attempt;
+  const selectionRevision = studio.modelSelectionRevision || 0;
+  const externalAttempt = studio.externalConnectionAttempt || 0;
   try {
     const [result, status, ollamaStatus, apiPresets] = await Promise.all([
       getModels(),
@@ -2482,28 +2517,34 @@ async function refreshModels() {
       getOllamaStatus(studio.ollamaHost).catch((error) => ({ state: "error", running: false, compatible_models: [], error: { code: error.code, message: error.message } })),
       getApiProviderPresets().catch(() => ({ presets: [] })),
     ]);
+    if (studio.modelDiscoveryAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     const selectedId = studio.selectedModel?.id;
     const selectedBeforeRefresh = studio.selectedModel;
-    studio.ollamaStatus = ollamaStatus;
-    studio.ollamaError = ollamaStatus.error || null;
-    studio.apiProviderPresets = apiPresets.presets || [];
-    studio.models = [...result.models, ...(ollamaStatus.compatible_models || []), ...studio.apiProviderModels];
-    studio.externalModel = null;
-    studio.externalServerError = null;
+    const models = [...result.models, ...(ollamaStatus.compatible_models || []), ...studio.apiProviderModels];
+    let externalModel = null;
+    let externalServerError = null;
     if (studio.externalServerConfig) {
       try {
         const external = await probeExternalServer(studio.externalServerConfig);
-        studio.externalModel = external.model;
-        studio.models.push(external.model);
+        if (studio.modelDiscoveryAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision || (studio.externalConnectionAttempt || 0) !== externalAttempt) return;
+        externalModel = external.model;
+        models.push(external.model);
       } catch (error) {
-        studio.externalServerError = error;
+        if (studio.modelDiscoveryAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision || (studio.externalConnectionAttempt || 0) !== externalAttempt) return;
+        externalServerError = error;
       }
     }
+    studio.ollamaStatus = ollamaStatus;
+    studio.ollamaError = ollamaStatus.error || null;
+    studio.apiProviderPresets = apiPresets.presets || [];
+    studio.models = models;
+    studio.externalModel = externalModel;
+    studio.externalServerError = externalServerError;
     studio.modelSetup = result.setup || [];
     studio.modelDiscovery = result.discovery || null;
     studio.modelDirectory = result.model_directory || "ComfyUI/models/LLM/";
     studio.gpuMemory = status.gpu_memory;
-    updatePromptResidency(status);
+    if (!studio.requestBusy) updatePromptResidency(status);
     const restoredModel = !selectedBeforeRefresh ? restoredModelAfterDiscovery(studio) : null;
     selectModel(
       restoredModel
@@ -2514,11 +2555,18 @@ async function refreshModels() {
       { preserveSettingsProvider: studio.root.classList.contains("is-settings-open") },
     );
     studio.preferencesRestoring = false;
-    setGenerationState("idle", "", "");
+    if (!studio.requestBusy) setGenerationState("idle", "", "");
     refreshGGUFRuntimeDiagnostics();
   } catch (error) {
+    if (studio.modelDiscoveryAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
     studio.preferencesRestoring = false;
     showToast(error.code || "Model scan failed", error.message, error.details);
+  } finally {
+    // A newer selection can invalidate the result, but must not leave startup
+    // restoration active. A newer discovery owns its own completion instead.
+    if (studio.modelDiscoveryAttempt === attempt) {
+      studio.preferencesRestoring = false;
+    }
   }
 }
 

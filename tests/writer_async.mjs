@@ -153,20 +153,187 @@ test("an old Composer Add cannot clear a reopened composition", async () => {
   const started = deferred();
   const state = { items: [{}], open: true, openGeneration: 1 };
   const context = vm.createContext({
-    state, dom: { add: { disabled: false } },
+    state, dom: { add: { disabled: false }, dialog: { focus() {} } },
     exportPicture: async () => ({}),
     onAddPicture: () => { started.resolve(); return upload.promise; },
-    normalizeCanvas() {}, close: () => { state.open = false; },
-    notify() {}, renderPreview() {},
+    normalizeCanvas() {}, clearDragGhost() {}, endCaption() {},
+    notify() {}, renderPreview() {}, renderAll() {}, onOpenChange() {},
+    setAssets: (assets) => { state.assets = assets; },
+    document: { activeElement: null }, requestAnimationFrame: (callback) => callback(),
+    root: { querySelector: () => null }, shellHomes: [],
+    $: (selector) => selector === "[data-shell-controls]" ? { querySelector: () => ({}) } : null,
+    el: { classList: { add() {}, remove() {} }, setAttribute() {} },
   });
   const declaration = composerSource.match(/^  async function addPicture\([^]*?^  }/m);
   vm.runInContext(declaration[0], context);
+  vm.runInContext(composerSource.slice(composerSource.indexOf("  function open("), composerSource.indexOf("  function destroy(")), context);
   const operation = context.addPicture();
   await started.promise;
-  state.openGeneration++;
+  context.close();
+  context.open();
   state.items = [{ uid: "new composition" }];
   upload.resolve();
   await operation;
   assert.equal(state.items[0]?.uid, "new composition");
   assert.equal(state.open, true);
+});
+
+function providerController(overrides = {}) {
+  const studio = {
+    apiProviderConfig: { preset: "custom" }, apiProviderModels: [], models: [],
+    root: { classList: { contains: () => false } }, modelSelectionRevision: 0,
+    ...overrides,
+  };
+  return controller([
+    "connectConfiguredApiProvider", "disconnectConfiguredApiProvider", "chooseApiProviderPreset",
+    "refreshApiProviderModels", "connectExternalServer", "disconnectExternalServer", "refreshModels",
+  ], {
+    studio, localStorage: {}, showToast() {}, renderInferenceSettings() {}, syncRuntimeSummary() {},
+    saveUserPreferences() {}, saveApiProviderConfig() {}, saveExternalServerConfig() {},
+    apiProviderModelForSettings: () => null, disconnectApiProvider: async () => {},
+    selectModel: (model) => { studio.selectedModel = model; studio.modelSelectionRevision++; },
+    API_PROVIDER_UI: { custom: {}, openai: {} },
+    getModels: async () => ({ models: [] }), getStatus: async () => ({}),
+    getOllamaStatus: async () => ({}), getApiProviderPresets: async () => ({}),
+    restoredModelAfterDiscovery: () => null, updatePromptResidency() {},
+    setGenerationState: (phase) => { studio.requestBusy = phase === "busy"; },
+    refreshGGUFRuntimeDiagnostics() {},
+  });
+}
+
+function providerForm() {
+  return { querySelector: () => ({}), elements: {
+    model_id: { value: "model" }, url: { value: "http://localhost:8080" },
+    model: { value: "model" }, api_key: { value: "" },
+  } };
+}
+
+test("late API Connect releases only its own connection after a newer Connect", async () => {
+  const first = deferred();
+  const api = providerController();
+  const disconnected = [];
+  let calls = 0;
+  api.disconnectApiProvider = async (id) => { disconnected.push(id); };
+  api.probeApiProvider = () => ++calls === 1 ? first.promise : Promise.resolve({ connection: { id: "B" }, models: [] });
+  const old = api.connectConfiguredApiProvider(providerForm());
+  await api.connectConfiguredApiProvider(providerForm());
+  first.resolve({ connection: { id: "A" }, models: [] });
+  await old;
+  assert.equal(api.studio.apiProviderConnection.id, "B");
+  assert.deepEqual(disconnected, ["A"]);
+});
+
+test("a newer External Connect owns selection while an older API Connect finishes", async () => {
+  const first = deferred();
+  const second = deferred();
+  const api = providerController();
+  api.probeApiProvider = () => first.promise;
+  api.probeExternalServer = () => second.promise;
+  const old = api.connectConfiguredApiProvider(providerForm());
+  const current = api.connectExternalServer(providerForm());
+  first.resolve({ connection: { id: "A" }, model: { id: "A", name: "A" }, models: [] });
+  await old;
+  assert.equal(api.studio.selectedModel, undefined);
+  second.resolve({ model: { id: "B", name: "B", endpoint: "http://localhost" } });
+  await current;
+  assert.equal(api.studio.selectedModel.id, "B");
+});
+
+test("a new Connect is not invalidated by an earlier background discovery", async () => {
+  const discovery = deferred();
+  const connection = deferred();
+  const api = providerController();
+  api.getModels = () => discovery.promise;
+  api.probeApiProvider = () => connection.promise;
+  const old = api.refreshModels();
+  const current = api.connectConfiguredApiProvider(providerForm());
+  discovery.resolve({ models: [] });
+  await old;
+  connection.resolve({ connection: { id: "new" }, model: { id: "new", name: "new" }, models: [] });
+  await current;
+  assert.equal(api.studio.selectedModel?.id, "new");
+});
+
+test("stale initial discovery finishes restoration and permits saving runtime preferences", async () => {
+  const discovery = deferred();
+  const connection = deferred();
+  const api = providerController({ preferencesRestoring: true });
+  controller(["rememberRuntimePreferences"], api);
+  api.getModels = () => discovery.promise;
+  api.probeApiProvider = () => connection.promise;
+  const initial = api.refreshModels();
+  const current = api.connectConfiguredApiProvider(providerForm());
+  discovery.resolve({ models: [] });
+  await initial;
+  connection.resolve({ connection: { id: "new" }, model: { id: "new", name: "new" }, models: [] });
+  await current;
+  assert.equal(api.studio.selectedModel.id, "new");
+  assert.equal(api.studio.preferencesRestoring, false);
+  api.studio.contextProfile = "custom";
+  api.studio.contextTokens = 24576;
+  api.rememberRuntimePreferences("direct");
+  assert.equal(api.studio.directContextTokens, 24576);
+});
+
+test("Disconnect invalidates pending API model refresh and Connect", async () => {
+  for (const connect of [false, true]) {
+    const pending = deferred();
+    const api = providerController({ apiProviderConnection: { id: "old" } });
+    api.getApiProviderModels = () => pending.promise;
+    api.probeApiProvider = () => pending.promise;
+    const operation = connect ? api.connectConfiguredApiProvider(providerForm()) : api.refreshApiProviderModels();
+    await api.disconnectConfiguredApiProvider();
+    pending.resolve({ connection: { id: "late" }, models: [] });
+    await operation;
+    assert.equal(api.studio.apiProviderConnection, null);
+  }
+});
+
+test("changing API preset invalidates pending Connect without an existing connection", async () => {
+  const pending = deferred();
+  const api = providerController();
+  api.probeApiProvider = () => pending.promise;
+  const operation = api.connectConfiguredApiProvider(providerForm());
+  await api.chooseApiProviderPreset("openai");
+  pending.resolve({ connection: { id: "late" }, models: [] });
+  await operation;
+  assert.equal(api.studio.apiProviderConfig.preset, "openai");
+});
+
+test("External Disconnect invalidates a pending probe", async () => {
+  const pending = deferred();
+  const api = providerController();
+  api.probeExternalServer = () => pending.promise;
+  const operation = api.connectExternalServer(providerForm());
+  api.disconnectExternalServer();
+  pending.resolve({ model: { id: "late", endpoint: "http://localhost", name: "late" } });
+  await operation;
+  assert.equal(api.studio.externalModel, null);
+});
+
+test("model discovery cannot release a generation started while it waited", async () => {
+  const pending = deferred();
+  const api = providerController();
+  api.getModels = () => pending.promise;
+  const operation = api.refreshModels();
+  api.studio.requestBusy = true;
+  pending.resolve({ models: [] });
+  await operation;
+  assert.equal(api.studio.requestBusy, true);
+});
+
+test("discovery probe cannot restore the model selected before a newer selection", async () => {
+  const pending = deferred();
+  const started = deferred();
+  const oldModel = { id: "old" };
+  const newModel = { id: "new" };
+  const api = providerController({ selectedModel: oldModel, externalServerConfig: {} });
+  api.getModels = async () => ({ models: [oldModel, newModel] });
+  api.probeExternalServer = () => { started.resolve(); return pending.promise; };
+  const operation = api.refreshModels();
+  await started.promise;
+  api.selectModel(newModel);
+  pending.resolve({ model: { id: "external" } });
+  await operation;
+  assert.equal(api.studio.selectedModel.id, "new");
 });
