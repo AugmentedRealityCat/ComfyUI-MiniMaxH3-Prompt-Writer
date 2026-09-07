@@ -977,12 +977,9 @@ function syncModeAvailability() {
       : "";
   });
   studio.root.querySelectorAll("[data-workspace]").forEach((control) => {
-    const unavailable = textOnlyDirect && control.dataset.workspace === "music";
-    control.disabled = studio.requestBusy || unavailable;
+    control.disabled = studio.requestBusy;
     control.setAttribute("aria-disabled", String(control.disabled));
-    control.title = unavailable
-      ? "This Direct GGUF is text-only. Only H3 Video · T2VA is available."
-      : "";
+    control.title = "";
   });
 }
 
@@ -990,7 +987,7 @@ function generationModeIsAvailable() {
   if (isGenerationModeAvailable(studio.selectedModel, studio.mode)) return true;
   showToast(
     "Text-only Direct GGUF",
-    "Use H3 Video · T2VA, or add the matching mmproj to enable visual modes.",
+    "Use T2VA or Music3, or add the matching mmproj to enable visual modes.",
   );
   return false;
 }
@@ -1956,7 +1953,7 @@ function renderInferenceSettings() {
       : runtimeRequirement.state === "update_required"
         ? renderDirectModelRuntimeUpdate(directModel)
         : isTextOnlyDirectModel(directModel)
-          ? `<div class="h3ps-direct-model-note"><strong>Text-only model · T2VA available</strong><span>${escapeHtml(directModel.capability_message || "No compatible vision projector is active.")}</span></div>`
+          ? `<div class="h3ps-direct-model-note"><strong>Text-only model · T2VA and Music3 available</strong><span>${escapeHtml(directModel.capability_message || "No compatible vision projector is active.")}</span></div>`
           : "";
   } else {
     directStatus.innerHTML = "";

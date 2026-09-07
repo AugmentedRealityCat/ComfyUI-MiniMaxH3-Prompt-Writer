@@ -728,6 +728,13 @@ test("Audio added notice remains visible for six seconds", () => {
   assert.match(mainSource, /"Audio added"[\s\S]{0,280}\{ durationMs: 6000 \}/);
 });
 
+test("mode drafts round trip prompts longer than 16k without truncation", () => {
+  const storage = memoryStorage();
+  const prompt = "Long prompt 🙂\n".repeat(2000);
+  saveModeDrafts(storage, { Reference: { brief: "brief", prompt } });
+  assert.equal(loadModeDrafts(storage).Reference.prompt, prompt);
+});
+
 test("all mode drafts persist independently across reloads", () => {
   const storage = memoryStorage();
   saveModeDrafts(storage, {
@@ -1052,7 +1059,7 @@ test("External queue handoff waits for exact unloaded status and fails closed on
   }),error=>error.code==='WRITER_UNLOAD_FAILED');
 });
 
-test("text-only Direct models expose only T2VA", () => {
+test("text-only Direct models expose T2VA and Music3", () => {
   const textOnly = {
     id: "direct-text-only",
     family: "gguf",
@@ -1068,7 +1075,8 @@ test("text-only Direct models expose only T2VA", () => {
 
   assert.equal(isTextOnlyDirectModel(textOnly), true);
   assert.equal(isGenerationModeAvailable(textOnly, "T2VA"), true);
-  for (const mode of ["I2VA", "FL2VA", "L2VA", "Reference", "Music3"]) {
+  assert.equal(isGenerationModeAvailable(textOnly, "Music3"), true);
+  for (const mode of ["I2VA", "FL2VA", "L2VA", "Reference"]) {
     assert.equal(isGenerationModeAvailable(textOnly, mode), false);
   }
   assert.equal(isTextOnlyDirectModel(vision), false);
@@ -1493,10 +1501,9 @@ test("active requests block add, reorder, and mode switching", () => {
   assert.match(mainSource, /const unavailable = !isGenerationModeAvailable[\s\S]{0,180}control\.disabled = studio\.requestBusy \|\| unavailable/);
 });
 
-test("text-only Direct UI disables visual and Music modes and explains the fallback", () => {
+test("text-only Direct UI disables visual modes and explains the fallback", () => {
   assert.match(mainSource, /function syncModeAvailability\(\)/);
-  assert.match(mainSource, /data-workspace[\s\S]{0,220}control\.dataset\.workspace === "music"/);
-  assert.match(mainSource, /Text-only model · T2VA available/);
+  assert.match(mainSource, /Text-only model · T2VA and Music3 available/);
   assert.match(mainSource, /Switched to T2VA/);
   assert.match(mainSource, /if \(!generationModeIsAvailable\(\)\) return/);
   assert.match(stylesSource, /\.h3ps-modes button:disabled/);

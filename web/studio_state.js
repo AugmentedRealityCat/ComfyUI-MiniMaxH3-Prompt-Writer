@@ -31,7 +31,7 @@ export function isTextOnlyDirectModel(model) {
 }
 
 export function isGenerationModeAvailable(model, mode) {
-  return !isTextOnlyDirectModel(model) || mode === "T2VA";
+  return !isTextOnlyDirectModel(model) || mode === "T2VA" || mode === "Music3";
 }
 
 export function isModeDraftDirty(mode, draft, defaults) {
@@ -58,17 +58,23 @@ export function normalizeCustomFrameCount(value) {
   return Number.isInteger(count) && count >= 2 && count <= 24 ? String(count) : null;
 }
 
+function normalizeModeDraft(mode, draft) {
+  if (!draft || typeof draft.brief !== "string" || typeof draft.prompt !== "string") return null;
+  const briefLimit = mode === "Music3" ? 2000 : 8000;
+  const normalized = { brief: draft.brief.slice(0, briefLimit), prompt: draft.prompt };
+  if (mode === "Music3") {
+    normalized.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, 4000) : "";
+  }
+  return normalized;
+}
+
 export function loadModeDrafts(storage = globalThis.localStorage) {
   try {
     const value = JSON.parse(storage?.getItem(MODE_DRAFTS_STORAGE_KEY) || "null");
     if (!value || value.version !== 1 || !value.drafts || typeof value.drafts !== "object") return {};
     return Object.fromEntries(DRAFT_MODES.flatMap((mode) => {
-      const draft = value.drafts[mode];
-      if (!draft || typeof draft.brief !== "string" || typeof draft.prompt !== "string") return [];
-      const briefLimit = mode === "Music3" ? 2000 : 8000;
-      const safeDraft = { brief: draft.brief.slice(0, briefLimit), prompt: draft.prompt.slice(0, 16000) };
-      if (mode === "Music3") safeDraft.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, 4000) : "";
-      return [[mode, safeDraft]];
+      const draft = normalizeModeDraft(mode, value.drafts[mode]);
+      return draft ? [[mode, draft]] : [];
     }));
   } catch {
     return {};
@@ -77,12 +83,8 @@ export function loadModeDrafts(storage = globalThis.localStorage) {
 
 export function saveModeDrafts(storage, drafts) {
   const safeDrafts = Object.fromEntries(DRAFT_MODES.flatMap((mode) => {
-    const draft = drafts?.[mode];
-    if (!draft || typeof draft.brief !== "string" || typeof draft.prompt !== "string") return [];
-    const briefLimit = mode === "Music3" ? 2000 : 8000;
-    const safeDraft = { brief: draft.brief.slice(0, briefLimit), prompt: draft.prompt.slice(0, 16000) };
-    if (mode === "Music3") safeDraft.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, 4000) : "";
-    return [[mode, safeDraft]];
+    const draft = normalizeModeDraft(mode, drafts?.[mode]);
+    return draft ? [[mode, draft]] : [];
   }));
   storage?.setItem(MODE_DRAFTS_STORAGE_KEY, JSON.stringify({ version: 1, drafts: safeDrafts }));
 }
