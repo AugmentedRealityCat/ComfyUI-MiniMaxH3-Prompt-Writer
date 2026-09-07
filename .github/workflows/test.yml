@@ -27,13 +27,11 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install aiohttp av pillow numpy
 
-      - name: Run Python tests
+      # unittest includes the local Node frontend wrapper; do not run it twice.
+      - name: Run Python and frontend tests
         env:
           PYTHONPATH: tests/ci_stubs
         run: python -m unittest discover -s tests -p "test_*.py"
-
-      - name: Run frontend tests
-        run: node --test tests/frontend_regressions.mjs
 
       - name: Run Standalone tests
         env:

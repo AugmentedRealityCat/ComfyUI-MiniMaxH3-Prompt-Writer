@@ -351,34 +351,12 @@ function sharedInferencePayload(state) {
 }
 
 export function buildGeneratePayload(state, { creativeBrief, lyrics = "", seed }) {
-  const directRuntime = state.selectedModel?.family === "gguf";
-  const thinking = state.selectedModel?.family === "external" ? false : state.thinking;
-  const generationBudgetMode = state.generationBudget || "auto";
-  const generationBudget = generationBudgetMode === "custom"
-    ? (state.generationBudgetTokens ?? 0)
-    : generationBudgetMode === "auto" ? null : Number(generationBudgetMode);
   const payload = {
-    session_id: state.sessionId,
-    mode: state.mode,
+    ...sharedInferencePayload(state),
     duration_seconds: state.durationSeconds,
     aspect_ratio: state.aspectRatio,
     creative_brief: creativeBrief,
-    model_id: state.selectedModel?.id,
-    external_server: selectedExternalServer(state),
-    ollama_model: selectedOllamaModel(state),
-    ollama_host: selectedOllamaHost(state),
-    api_provider: selectedApiProvider(state),
-    thinking,
-    context_profile: directRuntime ? state.contextProfile : "auto",
-    kv_cache: directRuntime ? state.kvCache : "auto",
-    ...(directRuntime ? {
-      context_tokens: state.contextProfile === "custom" ? state.contextTokens : null,
-      generation_budget: generationBudget,
-    } : {}),
-    ...(directRuntime && thinking ? { reasoning_effort: state.reasoningEffort || "auto" } : {}),
-    system_prompt_override: currentSystemPromptOverride(state),
     seed,
-    unload_after: !state.keepModelLoaded,
   };
   if (state.mode === "Music3") payload.lyrics = lyrics;
   return payload;
