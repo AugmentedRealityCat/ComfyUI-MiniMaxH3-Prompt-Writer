@@ -741,6 +741,7 @@ class ApiProviderBackend:
             self._connection = http_connection
         content_parts: list[str] = []
         finish_reason: str | None = None
+        terminal_received = False
         usage: dict[str, Any] = {}
         usage_source = "missing"
         request_id: str | None = None
@@ -772,6 +773,7 @@ class ApiProviderBackend:
                     continue
                 event = decoded[5:].strip()
                 if event == "[DONE]":
+                    terminal_received = True
                     break
                 try:
                     chunk = json.loads(event)
@@ -824,6 +826,12 @@ class ApiProviderBackend:
                 if self._connection is http_connection:
                     self._connection = None
             http_connection.close()
+        if not terminal_received and finish_reason is None:
+            raise ModelError(
+                "API_STREAM_INTERRUPTED",
+                "The generation stream ended before completion.",
+                {"partial_output": bool(content_parts)},
+            )
         content = "".join(content_parts)
         if not usage:
             usage = {"prompt_tokens": 0, "completion_tokens": estimate_text_tokens(content)}

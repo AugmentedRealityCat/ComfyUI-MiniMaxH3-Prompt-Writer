@@ -246,6 +246,7 @@ class ExternalServerBackend:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         finish_reason = None
+        terminal_received = False
         usage: dict[str, Any] = {}
         try:
             connection.request(
@@ -279,6 +280,7 @@ class ExternalServerBackend:
                     continue
                 event = decoded[5:].strip()
                 if event == "[DONE]":
+                    terminal_received = True
                     break
                 try:
                     chunk = json.loads(event)
@@ -314,6 +316,12 @@ class ExternalServerBackend:
                 if self._connection is connection:
                     self._connection = None
             connection.close()
+        if not terminal_received and finish_reason is None:
+            raise ModelError(
+                "EXTERNAL_STREAM_INTERRUPTED",
+                "The generation stream ended before completion.",
+                {"partial_output": bool(content_parts)},
+            )
         content = "".join(content_parts)
         reasoning = "".join(reasoning_parts)
         if not reasoning:

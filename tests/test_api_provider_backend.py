@@ -117,7 +117,9 @@ class _FakeApiHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             return
-        if model == "stream-error":
+        if model == "incomplete":
+            body = b'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'
+        elif model == "stream-error":
             body = (
                 'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n'
                 'data: {"error":{"message":"upstream stopped"}}\n\n'
@@ -175,6 +177,11 @@ class ApiProviderBackendTests(unittest.TestCase):
             reasoning_effort=kwargs.get("reasoning_effort", "minimal"),
             compatibility_profile=kwargs.get("compatibility_profile", "generic"),
         )
+
+    def test_partial_stream_without_terminal_is_rejected(self):
+        with self.assertRaises(ModelError) as error:
+            self.backend._request_chat_completion_stream(self._connection(), {"model": "incomplete"})
+        self.assertEqual(error.exception.code, "API_STREAM_INTERRUPTED")
 
     def test_custom_url_accepts_loopback_and_private_lan_http_but_requires_https_for_public_hosts(self):
         self.assertEqual(normalize_api_base_url("custom", self.base_url), self.base_url)

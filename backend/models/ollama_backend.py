@@ -516,6 +516,7 @@ class OllamaBackend:
             self._connection = connection
         content_parts: list[str] = []
         finish_reason = "stop"
+        terminal_received = False
         prompt_tokens = 0
         completion_tokens = 0
         try:
@@ -551,6 +552,7 @@ class OllamaBackend:
                 if isinstance(message, dict) and isinstance(message.get("content"), str):
                     content_parts.append(message["content"])
                 if chunk.get("done") is True:
+                    terminal_received = True
                     done_reason = str(chunk.get("done_reason") or "stop")
                     finish_reason = "length" if done_reason == "length" else "stop"
                     prompt_tokens = int(chunk.get("prompt_eval_count") or 0)
@@ -568,6 +570,12 @@ class OllamaBackend:
                 if self._connection is connection:
                     self._connection = None
             connection.close()
+        if not terminal_received:
+            raise ModelError(
+                "OLLAMA_STREAM_ERROR",
+                "The generation stream ended before completion.",
+                {"partial_output": bool(content_parts)},
+            )
         content = "".join(content_parts)
         return {
             "choices": [{"message": {"content": content}, "finish_reason": finish_reason}],

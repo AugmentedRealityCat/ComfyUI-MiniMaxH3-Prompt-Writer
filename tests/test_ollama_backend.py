@@ -114,6 +114,8 @@ class _FakeOllamaHandler(BaseHTTPRequestHandler):
                     "eval_count": 4,
                     "load_duration": 2_000_000_000,
                 })
+            if payload.get("model") == "incomplete":
+                events = events[:1]
             body = b"".join((json.dumps(event) + "\n").encode("utf-8") for event in events)
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
@@ -397,6 +399,14 @@ class OllamaBackendTests(unittest.TestCase):
         with self.assertRaises(ModelError) as thinking_error:
             self.backend.preflight(model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=True)
         self.assertEqual(thinking_error.exception.code, "OLLAMA_THINKING_UNAVAILABLE")
+
+    def test_partial_stream_without_terminal_is_rejected(self):
+        with self.assertRaises(ModelError) as error:
+            self.backend._chat_completion(
+                "incomplete", {"context_tokens": 8192}, messages=[],
+                temperature=1.0, top_p=0.95, top_k=64, max_tokens=1536, seed=42, thinking=False,
+            )
+        self.assertEqual(error.exception.code, "OLLAMA_STREAM_ERROR")
 
     def test_native_stream_sends_num_ctx_images_and_keep_alive(self):
         result = self.backend._chat_completion(

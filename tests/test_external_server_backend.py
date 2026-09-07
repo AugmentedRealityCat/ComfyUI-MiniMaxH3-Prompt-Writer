@@ -52,6 +52,13 @@ class _FakeLlamaHandler(BaseHTTPRequestHandler):
             return
         type(self).last_completion = payload
         type(self).completion_count += 1
+        if payload.get("model") == "incomplete":
+            body = b'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if type(self).reasoning_mode == "separate":
             reasoning_chunks = [
                 {"choices": [{"delta": {"reasoning_content": "PRIVATE_"}, "finish_reason": None}]},
@@ -161,6 +168,11 @@ class ExternalServerBackendTests(unittest.TestCase):
         _FakeLlamaHandler.reasoning_mode = "off"
         _FakeLlamaHandler.completion_count = 0
         self.backend = ExternalServerBackend()
+
+    def test_partial_stream_without_terminal_is_rejected(self):
+        with self.assertRaises(ModelError) as error:
+            self.backend._request_chat_completion_stream(self.url, {"model": "incomplete"})
+        self.assertEqual(error.exception.code, "EXTERNAL_STREAM_INTERRUPTED")
 
     def test_only_loopback_root_urls_are_accepted(self):
         self.assertEqual(normalize_server_url("http://localhost:8080/v1"), "http://localhost:8080")
