@@ -61,7 +61,7 @@ ComfyUI/models/LLM/
     └── mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf
 ```
 
-Do not share a projector across incompatible model classes because the filenames happen to match. Writer reads the GGUF metadata to distinguish models from projectors, so a projector does not need `mmproj` in its filename. The filename is only an Extension compatibility hint when metadata cannot be read. Writer enables vision only when it finds one metadata-compatible projector for a model. A missing or ambiguous projector does not hide the model; it leaves the model available in text-only T2VA mode and reports the pairing problem in Direct settings and Scan details.
+Do not share a projector across incompatible model classes because the filenames happen to match. Writer reads the GGUF metadata to distinguish models from projectors, so a projector does not need `mmproj` in its filename. The filename is only an Extension compatibility hint when metadata cannot be read. Writer enables vision only when it finds one metadata-compatible projector for a model. A missing or ambiguous projector does not hide the model; it leaves the model available in text-only T2VA and Music3 modes and reports the pairing problem in Direct settings and Scan details.
 
 Select **Refresh** after adding files. Expand **Scan details** if the model does not appear.
 

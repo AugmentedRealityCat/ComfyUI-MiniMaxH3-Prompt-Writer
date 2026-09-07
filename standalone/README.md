@@ -39,6 +39,34 @@ over the same folder.
 The Writer opens directly in a full-window browser view. Close the browser tab or
 window normally.
 
+### Linux
+
+Standalone also runs on Linux using the same Python backend and browser-based interface.
+
+When running Standalone from a repository checkout, use the included Linux launcher:
+
+```bash
+chmod +x start-linux.sh
+./start-linux.sh
+```
+
+For Local GGUF, point it to your Linux `llama-server` executable:
+
+```bash
+H3_LLAMA_SERVER="/path/to/llama-server" ./start-linux.sh
+```
+
+You can also provide model paths on first launch:
+
+```bash
+H3_MODEL_ROOT="/path/to/models" \
+H3_MODEL="/path/to/model.gguf" \
+H3_PROJECTOR="/path/to/mmproj.gguf" \
+./start-linux.sh
+```
+
+Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
+
 ## What's new in v0.1.4
 
 - **Media Composer:** combine Pictures and video contact sheets into a collage. Arrange media, add captions, then copy, download, or add the result as a new Picture.
@@ -73,7 +101,7 @@ select and unload models from Writer. Context and KV cache remain server-managed
 
 ### Local GGUF
 
-Standalone can start and stop a user-supplied `llama-server.exe` for existing GGUF
+Standalone can start and stop a user-supplied `llama-server` executable for existing GGUF
 models:
 
 1. Download the appropriate Windows archive from the official
@@ -85,7 +113,7 @@ models:
 
 Use **Locations · N** to see remembered model folders, forget one, or forget all.
 Forgetting a location never deletes files. Use the runtime card's **Manage** menu to
-change or forget `llama-server.exe`.
+change or forget the `llama-server` executable.
 
 Model and projector roles are read from GGUF metadata, not filenames. Unknown files
 remain selectable as **Unverified**. If several projectors match, Standalone asks you
