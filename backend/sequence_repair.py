@@ -6,6 +6,7 @@ import re
 from .assembly import _guide_messages
 from .models.contract import ModelError
 from .sequence_output import LITERAL
+from .sequence_format import COMPACT_CONTRACT, compact_content
 
 
 def normalize_image_task_prefix(prompt, mode, assets):
@@ -49,10 +50,17 @@ def media_contract(mode, assets):
 def assemble_repair(item, prompt, failure):
     request = copy.deepcopy(item)
     mode = item["input"]["mode"]
+    compact = item["input"].get("output_format") == "compact"
     payload = {"original_prompt": prompt, "validator_problems": failure.details,
-               "mode": mode, "duration_seconds": item["input"]["duration_seconds"],
+               "mode": mode, "output_format": "compact" if compact else "official", "duration_seconds": item["input"]["duration_seconds"],
                "media_manifest": item["input"]["media_manifest"]}
     request["sequence_stage"] = "repair"
+    if compact:
+        request["messages"] = [{"role": "system", "content": COMPACT_CONTRACT}, {"role": "user", "content":
+            "This is the only format correction attempt. Remove official section headings from the original prompt. "
+            "Keep all scene descriptions, dialogue, timing, sound, camera intent and style verbatim. Do not plan, add content, or rewrite the scene. "
+            "Keep overall_soundscape and non_diegetic_music as the final two fields, with their content unchanged. Return the full Compact prompt.\n" + json.dumps(payload, ensure_ascii=False)}]
+        return request
     request["messages"] = _guide_messages(mode, "") + [{"role": "user", "content":
         "Correct only objective H3 contract/format violations in the supplied model output. This is the sole repair attempt. "
         "Preserve scene facts, actions, progression, dialogue/monologue verbatim, timing intent, camera intent and style. "
@@ -64,7 +72,7 @@ def assemble_repair(item, prompt, failure):
     return request
 
 
-def preserve_content(original, candidate, mode):
+def preserve_content(original, candidate, mode, output_format="official"):
     """Contract repair may edit bindings and task metadata, never the actual scene."""
     fields = ["detailed_description" if mode == "Reference" else "integrated_multimodal_description",
               "overall_soundscape", "non_diegetic_music"]
@@ -73,7 +81,8 @@ def preserve_content(original, candidate, mode):
         end = r"(?=^\s*" + fields[index + 1] + r"\s*:)" if index < 2 else r"\Z"
         match = re.search(r"(?ms)^\s*" + fields[index] + r"\s*:[ \t]*(.*?)" + end, text)
         return re.sub(r"\s+", " ", match[1]).strip() if match else None
-    if (any(content(original, i) != content(candidate, i) for i in range(3))
+    changed = compact_content(original) != compact_content(candidate) if output_format == "compact" else any(content(original, i) != content(candidate, i) for i in range(3))
+    if (changed
             or LITERAL.findall(original) != LITERAL.findall(candidate)):
         raise ModelError("INVALID_SEQUENCE_PROMPT", "The model changed scene content during its format correction.",
                          {"contract_failure": "the format correction changed narrative or sound content", "repairable": False})
@@ -88,6 +97,9 @@ def attention_message(failure, item):
                  f"00:{seconds:02.0f}.000. 05:00.000 means five minutes. Edit the time if intended, or Regenerate / Refine.")
     if "timestamp" in detail.lower() or "cut time" in detail.lower():
         return "The model returned an invalid local time.\n\n" + detail.rstrip(".") + ".\n\n" + time_hint
+    if item["input"].get("output_format") == "compact":
+        return ("The model could not finish the Compact output. This is a generated-output issue; you do not need to change your inputs.\n\n"
+                + detail.rstrip(".") + ". Edit or Regenerate / Refine. Expected: scene description, then overall_soundscape: Room ambience. and non_diegetic_music: N/A (unless music was requested).")
     explanations = []
     problems = failure.details.get("problems", [detail]) if isinstance(failure.details, dict) else [detail]
     for problem in problems:

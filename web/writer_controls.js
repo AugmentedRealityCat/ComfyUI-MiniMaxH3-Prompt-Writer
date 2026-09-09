@@ -51,3 +51,8 @@ export function setSplitMenuOpen(control, open) {
 export function copyButtonMarkup(icon, attributes, label = "", iconOnly = false) {
   return `<button class="${iconOnly ? "h3ps-icon-button" : "h3ps-secondary-button"}" type="button" ${attributes}>${icon("copy", 15)}${label ? ` ${label}` : ""}</button>`;
 }
+
+// Option labels and actions are trusted constants supplied by Writer views.
+export function formatChoiceMarkup(label, options, selected) {
+  return `<div class="h3ps-sequence-copy-choice" role="group" aria-label="${label}">${options.map(([action,text])=>`<button type="button" data-seq-action="${action}" aria-pressed="${action===selected}">${text}</button>`).join("")}</div>`;
+}

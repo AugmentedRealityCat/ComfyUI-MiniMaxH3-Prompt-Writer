@@ -1,7 +1,7 @@
-import { loadSequence, saveSequence, addChunk, deleteChunk, timeline, effectiveMedia, aggregate, duration, MAX_CHUNK_DURATION, DEFAULT_SEQUENCE_INSTRUCTIONS, revisePrompt, assignReference, removeReference, reconcileMedia } from "./sequence_state.js";
+import { loadSequence, saveSequence, addChunk, deleteChunk, timeline, effectiveMedia, aggregate, duration, MAX_CHUNK_DURATION, sequenceInstructionDefault, setSequenceFormat, revisePrompt, assignReference, removeReference, reconcileMedia } from "./sequence_state.js";
 import { createSequenceController } from "./sequence_controller.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
-import { generationButtonMarkup, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
+import { formatChoiceMarkup, generationButtonMarkup, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 
 export const displaySeparator = value => value.replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/\r/g,"\\r").replace(/\t/g,"\\t");
 export const parseSeparator = value => value.replace(/\\([\\nrt])/g,(_, char)=>({n:"\n",r:"\r",t:"\t","\\":"\\"}[char]));
@@ -27,7 +27,7 @@ export function createSequenceWorkspace(host) {
   left.innerHTML = `<div class="h3ps-control-grid"><label class="h3ps-field h3ps-duration-field" title="Applies to the next Add chunk; existing chunks keep their durations"><span>New chunk duration <b data-seq-default-label></b></span><div><input type="range" min="1" max="${MAX_CHUNK_DURATION}" step="1" data-seq-default><i></i></div></label>${aspectRatioMarkup(host.icon,"sequence-aspect")}</div>
     <section class="h3ps-sequence-media"><strong title="Add a first frame, last frame, or references to guide the sequence. In the Creative Brief, refer to them as first frame, last frame, or reference 1; inside chunks, use the shown &lt;Picture N&gt; tag.">Sequence media</strong><div data-seq-global-media></div></section>
     <label class="h3ps-brief"><span><strong>Creative brief</strong><small>Describe the whole sequence, including absolute times</small></span><textarea spellcheck="false" maxlength="8000" data-seq-brief placeholder="At around 15 seconds she stands up…"></textarea></label>
-    <section class="h3ps-music-system-prompt"><button type="button" class="h3ps-music-system-prompt-toggle" data-seq-action="instructions" aria-expanded="false"><strong>Sequence Instructions</strong><span>${host.icon("chevron",12)}</span></button><div data-seq-instructions-panel hidden><div class="h3ps-system-prompt-panel"><textarea spellcheck="false" maxlength="32000" data-seq-instructions aria-label="Sequence Instructions"></textarea><footer>${button("reset", "Restore default")}</footer></div><small class="h3ps-sequence-contract-hint">Each chunk uses the official MiniMax Base guide for T2VA/I2VA/FL2VA/L2VA, or the Reference guide when references are present. Multi-chunk generation uses one internal semantic planning pass to allocate development and intended ending states, then one generation call per generated chunk. H3 format issues get at most one automatic correction. Completed prompts are kept; previous versions stay in Undo. Each result is a full standalone official H3 prompt with local timing and continuity from the preceding accepted prompt.</small></div></section>`;
+    <section class="h3ps-music-system-prompt"><button type="button" class="h3ps-music-system-prompt-toggle" data-seq-action="instructions" aria-expanded="false"><strong>Sequence Instructions</strong><span>${host.icon("chevron",12)}</span></button><div data-seq-instructions-panel hidden><div class="h3ps-system-prompt-panel"><textarea spellcheck="false" maxlength="32000" data-seq-instructions aria-label="Sequence Instructions"></textarea><footer class="h3ps-sequence-instructions-footer">${formatChoiceMarkup("Sequence output format",[["format-official","Official"],["format-compact","Compact"]],"format-"+state.outputFormat)}${button("reset", "Restore default")}</footer></div><small class="h3ps-sequence-contract-hint" data-seq-contract></small></div></section>`;
   root.querySelector("[data-video-inputs]").append(left);
   left.querySelector("[data-seq-brief]").value = state.brief;
   left.querySelector("[data-seq-instructions]").value = state.instructions;
@@ -35,7 +35,7 @@ export function createSequenceWorkspace(host) {
   bindAspectRatio(left.querySelector(".h3ps-choice"), state.aspectRatio, value => { state.aspectRatio = value; persist(); });
   const right = document.createElement("section"); right.className = "h3ps-sequence-output"; right.setAttribute("aria-label","Generated sequence");
   right.innerHTML = `<header><strong>Generated sequence</strong><span data-seq-count></span>${iconButton("reader","Reader","reader",'aria-pressed="false"')}${copyButtonMarkup(host.icon,'data-seq-action="copy-all" title="Copy all prompts" aria-label="Copy all prompts"', "", true)}</header><section class="h3ps-sequence-copy-format" data-seq-copy-format hidden aria-label="Copy format">
-    <div class="h3ps-sequence-copy-options"><span>Copy format</span><div class="h3ps-sequence-copy-choice" role="group" aria-label="Copy format"><button type="button" data-seq-action="copy-default" aria-pressed="true">Default</button><button type="button" data-seq-action="copy-custom" aria-pressed="false">Custom</button></div><small data-seq-copy-default>Prompts only</small></div>
+    <div class="h3ps-sequence-copy-options"><span>Copy format</span>${formatChoiceMarkup("Copy format",[["copy-default","Default"],["copy-custom","Custom"]],"copy-default")}<small data-seq-copy-default>Prompts only</small></div>
     <div class="h3ps-sequence-copy-editor" data-seq-copy-custom hidden><div class="h3ps-sequence-copy-heading"><span>Shape your copied text</span>${button("copy-reset","Reset")}</div>
       <div class="h3ps-sequence-copy-examples" aria-label="Format examples">${button("copy-divider","Divider")}${button("copy-times","Time ranges")}${button("copy-numbered","Numbered")}${button("copy-chapters","Chapters")}</div>
       <label class="h3ps-field"><span>For each chunk</span><textarea spellcheck="false" data-seq-copy-template maxlength="8000" rows="2" spellcheck="false" aria-label="Chunk template"></textarea></label>
@@ -68,6 +68,11 @@ export function createSequenceWorkspace(host) {
     generateButton.disabled=false;
     left.querySelector("[data-seq-default-label]").textContent=`${state.defaultDuration}s`;
     left.querySelector("[data-seq-default]").style.setProperty("--h3ps-range",`${(state.defaultDuration-1)/(MAX_CHUNK_DURATION-1)*100}%`);
+    left.querySelectorAll('[data-seq-action^="format-"]').forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.seqAction==="format-"+state.outputFormat)));
+    left.querySelector('[data-seq-contract]').textContent=(state.outputFormat==="compact"
+      ? "Compact writes standalone natural-language video descriptions followed by overall_soundscape and non_diegetic_music. Media roles and local timing still apply. "
+      : "Official writes full standalone MiniMax H3 prompts using the Base guide or Reference guide for the effective media. ")
+      + "Multi-chunk generation uses one internal semantic planning call, then one generation call per requested chunk. Continuity comes from current neighboring prompts. Format issues get at most one correction. Previous versions stay in Undo.";
     syncSelection();
     right.querySelector("[data-seq-copy-format]").hidden=!reader;
     right.querySelector("[data-seq-copy-format]").inert=controller.busy;
@@ -184,6 +189,7 @@ export function createSequenceWorkspace(host) {
         await host.copy(name==="copy"?c.prompt:aggregate(state));
       }
       else if(!controller.busy) {
+        if(name==="format-official" || name==="format-compact") { setSequenceFormat(state,name.slice(7));left.querySelector('[data-seq-instructions]').value=state.instructions;persist();render();fit(left.querySelector('[data-seq-instructions]'));return; }
         if(name==="reader") { setReader(!reader); return; }
         if(name==="instructions") { const panel=left.querySelector("[data-seq-instructions-panel]"); panel.hidden=!panel.hidden; el.setAttribute("aria-expanded",String(!panel.hidden)); el.classList.toggle("is-open",!panel.hidden); fit(left.querySelector("[data-seq-instructions]")); return; }
         if(name==="select-media") { selection=slotTarget(el.closest("[data-seq-slot]")); sync(); root.querySelector('[data-h3ps-media] .is-sequence-selectable')?.focus({preventScroll:true}); return; }
@@ -205,7 +211,7 @@ export function createSequenceWorkspace(host) {
         else if(name==="delete") deleteChunk(state,c.id);
         else if(name==="increase" || name==="decrease") c.duration=Math.max(1,Math.min(MAX_CHUNK_DURATION,c.duration+(name==="increase"?1:-1)));
         else if(name==="undo" || name==="redo") revisePrompt(c,name);
-        else if(name==="reset") { state.instructions=DEFAULT_SEQUENCE_INSTRUCTIONS; left.querySelector("[data-seq-instructions]").value=state.instructions; fit(left.querySelector("[data-seq-instructions]")); }
+        else if(name==="reset") { state.instructions=sequenceInstructionDefault(state.outputFormat); left.querySelector("[data-seq-instructions]").value=state.instructions; fit(left.querySelector("[data-seq-instructions]")); }
         else if(name==="generate") { controller.start("generate",c.id); return; }
         else if(name==="refine-open" || name==="refine-close") { refineDrafts.set(c.id,{open:name==="refine-open"}); section.querySelector("[data-seq-refine]").hidden=name==="refine-close"; return; }
         else if(name==="refine") { controller.start("refine",c.id,section.querySelector("[data-seq-refine-instruction]").value); return; }

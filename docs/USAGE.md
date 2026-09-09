@@ -35,9 +35,27 @@ Duration and aspect ratio become part of the request. The generated text remains
 
 Choose **Sequence** to write several H3 prompts from one Creative Brief. Add chunks and set their durations, from 1 to 15 seconds each. **New chunk duration** applies to the next added chunk. On first use, a short example fills Creative Brief while chunk prompts stay empty. Edit or clear it; saved edits and empty briefs stay as you left them. The sequence keeps its own draft. It does not join videos, connect a workflow, or assume how you will use the chunks.
 
-For a multi-chunk operation, Writer makes one internal semantic planning call to allocate development and intended ending states for the requested chunks. It then makes one generation call per requested chunk, in order. A sequence with only one chunk skips planning. Each result is a full standalone official MiniMax H3 prompt, with its own scene description and local `[Shot 1]` numbering.
+For a multi-chunk operation, Writer makes one internal semantic planning call to allocate development and intended ending states for the requested chunks. It then makes one generation call per requested chunk, in order. A sequence with only one chunk skips planning. Official output is a full standalone MiniMax H3 prompt, with its own scene description and local `[Shot 1]` numbering. Compact output is a standalone descriptive video prompt in natural language.
 
 The brief and explicit instructions govern intent. Current media and visible prompts, including manual edits, supply scene evidence. The planner reads your original brief, Chunk Direction and objective chunk boundaries. It interprets timing in your own words, without an application-side language parser. The temporary plan distributes events, speech, atmosphere, or sustained activity. It does not require a new action at every boundary or invent a conclusion for an open-ended brief. Each writer continues the actual preceding ending and considers any following accepted opening. Planning is rebuilt for each operation. **Sequence Instructions** lets you adjust shared writing directions. No camera moves or cuts are requested unless you ask for them; added behavior stays modest and consistent with the brief.
+
+### Output format
+
+Open **Sequence Instructions** and choose **Official** or **Compact** below the textarea. Official is the default and follows the full Base/Reference structure. Compact receives its own writing contract, not the official Base/Reference guide. It writes a standalone natural-language description, then two required fields:
+
+```text
+A complete description of the scene and action.
+
+overall_soundscape:
+Brief, scene-grounded audible sounds.
+
+non_diegetic_music:
+N/A
+```
+
+Sound stays modest and natural. When you request music, the music field briefly describes it. Without a music request, or when you ask for no music, it stays `N/A`. Useful media literals and local timing remain available.
+
+Both formats share the same brief, media, planner, Chunk Direction, continuity and Generate/Refine behavior. Switching format affects future generations. It does not convert existing prompts or overwrite custom instructions. Restore default resets instructions for the selected format. Compact checks its description, sound fields, media labels and local timing. Missing sound content is not invented by format correction. A format correction cannot rewrite the scene.
 
 ### Media and guides
 
@@ -47,7 +65,7 @@ The brief and explicit instructions govern intent. Current media and visible pro
 | Last | Closing frame of the last chunk only |
 | Reference | Shared references, with additions or exclusions for individual chunks |
 
-Writer selects the guide for each chunk's effective media. With references, it uses the official Reference guide. Otherwise it uses the official Base guide: T2VA with no frames, I2VA with First, L2VA with Last, or FL2VA with both. First and Last can also accompany references. Uploading a file does not assign it automatically. The Reference summary starts with an official task prefix. For example, `[keyframe completion + reference generation]` is correct when a frame anchor and an appearance reference are supplied. Keep this prefix.
+In Official format, Writer selects the guide for each chunk's effective media. With references, it uses the official Reference guide. Otherwise it uses the official Base guide: T2VA with no frames, I2VA with First, L2VA with Last, or FL2VA with both. First and Last can also accompany references. Uploading a file does not assign it automatically. The Reference summary starts with an official task prefix. For example, `[keyframe completion + reference generation]` is correct when a frame anchor and an appearance reference are supplied. Keep this prefix.
 
 In the shared brief, use **first frame**, **last frame**, and **reference 1**. In a chunk field, use the tags shown for that chunk. Tags such as `<Picture 1>` are local to each request and can refer to different files in different chunks. The planner reads text and assignment roles; prepared images and video contact sheets go to the chunk writer. Describe audio roles in text, as in Single mode.
 
@@ -69,7 +87,7 @@ Planning improves continuity but does not guarantee natural pacing or exact visu
 
 A structurally invalid plan stops generation with an error. There is no fallback or hidden semantic repair. Lossless cleanup removes a complete outer Markdown fence and normalizes unambiguous local timestamp typos such as `05:000` to `00:05.000`. A value like `05:00` is normalized only when the chunk duration leaves one plausible in-range time, such as five seconds in a ten-second chunk. It never invents sections, moves events, or rewrites dialogue. Format-specific checks reject incomplete required content, invalid local shots or timestamps, unavailable media labels, and missing required frame anchors. It checks syntax and media contracts, not story quality.
 
-For image-only Reference inputs, Writer corrects impossible video/audio task labels from the assigned media roles. This changes only task metadata. Writer then allows at most one automatic H3 format correction per chunk, using the same guide and media. It does not change the plan or intentionally rewrite scene content. Ambiguous timing and missing content are left for review.
+For Official image-only Reference inputs, Writer corrects impossible video/audio task labels from the assigned media roles. This changes only task metadata. Writer allows at most one format correction per chunk with the same writing contract and media. Compact correction can remove stray official headings while preserving description and sound content. It does not change the plan or intentionally rewrite scene content. Ambiguous timing and missing content are left for review.
 
 During generation, chunks show Queued, Generating, Checking, or Repairing. Targeted editors start empty and show each completed prompt immediately. Previous versions stay in Undo/Redo. Cancel stops further work and keeps completed chunks. A failed format check keeps the model output with a small orange attention icon. Hover, focus, or select it for an explanation and a suggested fix. Regenerate, Refine, or edit that prompt directly. Manual edits clear the warning from the previous model output. Runtime and planning errors remain visible until dismissed. Longer prompts, references, and planning context can exceed the model's context limit. See [Sequence troubleshooting](TROUBLESHOOTING.md#sequence-stops-or-repeats-an-action).
 

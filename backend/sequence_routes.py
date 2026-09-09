@@ -90,9 +90,9 @@ async def run_sequence(body, services, emit):
             for attempt in range(2):
                 await emit({"type": "phase", "phase": "checking", **current_chunk})
                 try:
-                    prompt = plain_chunk_prompt(raw, item["input"]["mode"], item["input"]["duration_seconds"], item["input"]["media_manifest"]["assets"])
+                    prompt = plain_chunk_prompt(raw, item["input"]["mode"], item["input"]["duration_seconds"], item["input"]["media_manifest"]["assets"], item["input"].get("output_format", "official"))
                     if repaired:
-                        preserve_content(normalize_local_timestamps(original_prompt, item["input"]["duration_seconds"]), prompt, item["input"]["mode"])
+                        preserve_content(normalize_local_timestamps(original_prompt, item["input"]["duration_seconds"]), prompt, item["input"]["mode"], item["input"].get("output_format", "official"))
                     failure = None
                     break
                 except ModelError as error:

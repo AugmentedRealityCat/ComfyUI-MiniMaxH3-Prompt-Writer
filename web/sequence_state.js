@@ -5,6 +5,18 @@ Use the temporal plan to allocate the requested development, including speech, a
 Add modest, concrete natural behavior and transitions within the brief, not new story, people, consequential props, locations or motivations. Honor requested cuts, camera behavior and style; otherwise preserve the viewpoint and style without inventing camera moves. Avoid repetitive filler.
 Chunk Direction governs this interval. For refinement, apply the requested change to the current prompt while considering the accepted neighbors. Return only the full final H3 prompt, without commentary, planning or JSON.`;
 
+export const COMPACT_SEQUENCE_INSTRUCTIONS = `Write this interval as a complete standalone descriptive video prompt in natural language. Keep concrete scene context, useful request-local media labels and local timing where needed.
+The brief and explicit directions govern intent. Current media and the visible neighboring prompts supply scene evidence. First and Last constrain only their assigned boundary. An appearance reference supplies requested traits, not a new setting. Continue the preceding ending without replaying completed actions and approach any following opening.
+Use the temporal plan to allocate development, speech, atmosphere and sustained activity. Preserve explicit timing and dialogue. Boundaries do not require pauses, cuts or new actions. Reach a requested endpoint at its assigned time; otherwise allow a natural continuing state.
+Add modest natural behavior, not new story, people, consequential props, locations or motivations. Honor requested camera and style; otherwise invent no camera moves or cuts. Chunk Direction governs this interval. For Refine, apply the requested change to the current visible prompt. End with overall_soundscape: and a short description of scene-grounded audible sounds, then non_diegetic_music: and N/A unless music is requested. Describe requested music briefly; honor explicit no-music requests. Keep sounds modest and natural. Return only the final prompt.`;
+export const sequenceInstructionDefault = format => format === "compact" ? COMPACT_SEQUENCE_INSTRUCTIONS : DEFAULT_SEQUENCE_INSTRUCTIONS;
+export function setSequenceFormat(state, format) {
+  if (!["official", "compact"].includes(format)) return;
+  const untouched = [DEFAULT_SEQUENCE_INSTRUCTIONS, COMPACT_SEQUENCE_INSTRUCTIONS].includes(state.instructions);
+  state.outputFormat = format;
+  if (untouched) state.instructions = sequenceInstructionDefault(format);
+}
+
 const PREVIOUS_SEQUENCE_INSTRUCTIONS = `Write only the requested target clip as a complete MiniMax H3 prompt in the supplied official guide's format. Keep all required sections. Sequence metadata is planning context, never output prose: target time starts at zero and ends at the local duration. Translate an absolute event time by subtracting this clip's global start; events outside its interval belong elsewhere. Shot numbering restarts at [Shot 1] in every target clip, with no timestamp on its first shot.
 By default this is one continuous scene. A chunk boundary is not a cut or a new setup. Honor the user's requested cuts, camera behavior and style; otherwise preserve the existing viewpoint and visual style without inventing camera moves. Continue the predecessor's terminal physical state and ongoing motion; do not replay its approach or completed actions. Restate only the concrete scene and subject information needed to make the target clip usable independently. Predecessor media labels belong to its request, not this one: use only the current effective conditioning and its labels.
 Read the whole brief and horizon. Advance a plausible portion of the main action for this interval, leaving meaningful action for the remaining clips. Reserve the brief's terminal action and final pose for the final clip unless the user explicitly places them earlier; middle clips must develop the action rather than finish it and idle. A first frame constrains only the start where supplied; a last frame constrains only the end where supplied. Appearance references provide the requested traits, not a new setting or costume.
@@ -24,7 +36,7 @@ export function newChunk(seconds = 10) {
 export const INITIAL_SEQUENCE_BRIEF = `An animated character sings while moving naturally through a simple scene.
 Around 6 seconds, the character starts a small dance and keeps singing through the end.`;
 export function newSequence() {
-  return { version: 1, brief: INITIAL_SEQUENCE_BRIEF, instructions: DEFAULT_SEQUENCE_INSTRUCTIONS, defaultDuration: 10, aspectRatio: "16:9", first: null, last: null, references: [], chunks: [newChunk()], copyFormat: { format: "prompts", template: "{prompt}", separator: "\n\n" } };
+  return { version: 1, outputFormat: "official", brief: INITIAL_SEQUENCE_BRIEF, instructions: DEFAULT_SEQUENCE_INSTRUCTIONS, defaultDuration: 10, aspectRatio: "16:9", first: null, last: null, references: [], chunks: [newChunk()], copyFormat: { format: "prompts", template: "{prompt}", separator: "\n\n" } };
 }
 export function timeline(state) {
   let start = 0;
@@ -94,8 +106,8 @@ export function reconcileMedia(state, assets) {
   return before !== JSON.stringify([state.first, state.last, state.references, state.chunks.map(c => [c.additions,c.exclusions])]);
 }
 export function sequenceInputs(state) {
-  const {version, brief, instructions, defaultDuration, aspectRatio, first, last, references} = state;
-  return {version, brief, instructions, defaultDuration, aspectRatio, first, last, references,
+  const {version, brief, instructions, defaultDuration, aspectRatio, first, last, references, outputFormat} = state;
+  return {version, brief, instructions, defaultDuration, aspectRatio, first, last, references, outputFormat:outputFormat || "official",
     chunks: state.chunks.map(({id,duration,instruction,prompt,additions,exclusions,attention}) => ({id,duration,instruction,prompt,additions,exclusions,...(attention ? {attention} : {})}))};
 }
 export function saveSequence(storage, state) { storage?.setItem(SEQUENCE_STORAGE_KEY, JSON.stringify(state)); }
@@ -106,8 +118,8 @@ export function loadSequence(storage) {
     if (value?.version !== 1 || !Array.isArray(value.chunks) || !value.chunks.length) return fallback;
     const ids = new Set();
     const strings = a => Array.isArray(a) ? [...new Set(a.filter(x => typeof x === "string"))] : [];
-    return { ...fallback, brief: typeof value.brief === "string" ? value.brief.slice(0,8000) : "",
-      instructions: typeof value.instructions === "string" && ![LEGACY_SEQUENCE_INSTRUCTIONS, PREVIOUS_SEQUENCE_INSTRUCTIONS].includes(value.instructions) ? value.instructions : fallback.instructions,
+    return { ...fallback, outputFormat:value.outputFormat === "compact" ? "compact" : "official", brief: typeof value.brief === "string" ? value.brief.slice(0,8000) : "",
+      instructions: typeof value.instructions === "string" && ![LEGACY_SEQUENCE_INSTRUCTIONS, PREVIOUS_SEQUENCE_INSTRUCTIONS].includes(value.instructions) ? value.instructions : sequenceInstructionDefault(value.outputFormat),
       defaultDuration: duration(value.defaultDuration),
       aspectRatio: ["1:1","2:3","3:2","3:4","4:3","9:16","16:9","21:9"].includes(value.aspectRatio) ? value.aspectRatio : fallback.aspectRatio,
       first: typeof value.first === "string" ? value.first : null, last: typeof value.last === "string" ? value.last : null,

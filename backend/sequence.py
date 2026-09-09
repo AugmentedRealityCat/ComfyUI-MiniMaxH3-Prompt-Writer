@@ -14,6 +14,7 @@ from .models.contract import ModelError
 from .prompt_audit import REFERENCE_SECTIONS
 from .sequence_repair import media_contract, normalize_image_task_prefix
 from .sequence_output import validate_output, without_literals, LITERAL
+from .sequence_format import COMPACT_CONTRACT, validate_compact
 
 
 def validate_sequence(body: dict) -> dict:
@@ -22,6 +23,8 @@ def validate_sequence(body: dict) -> dict:
         raise AssemblyError("INVALID_SEQUENCE", message)
     if not isinstance(state, dict) or state.get("version") != 1:
         invalid("Expected a version 1 Sequence draft.")
+    if state.get("outputFormat", "official") not in {"official", "compact"}:
+        invalid("Choose Official or Compact output.")
     for name in ("brief", "instructions"):
         if not isinstance(state.get(name), str) or not state[name].strip():
             invalid(f"Sequence {name} is required.")
@@ -158,10 +161,12 @@ def normalize_local_timestamps(prompt, duration):
     return "".join(parts)
 
 
-def plain_chunk_prompt(text, mode, duration, assets=None):
+def plain_chunk_prompt(text, mode, duration, assets=None, output_format="official"):
     """Lossless cleanup followed by objective H3 validation, never semantic repair."""
     fence = re.fullmatch(r"\s*```(?:text)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*", text)
     prompt = fence[1] if fence else text
+    if output_format == "compact":
+        return validate_compact(normalize_local_timestamps(prompt, duration), duration, assets)
     fields = REFERENCE_SECTIONS if mode == "Reference" else (
         "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     matches = list(re.finditer(r"(?m)^\s*(" + "|".join(fields) + r")\s*:[ \t]*", without_literals(prompt)))
@@ -182,6 +187,7 @@ def plain_chunk_prompt(text, mode, duration, assets=None):
 
 
 def assemble_chunk(state, index, body, media, action_plan=None):
+    compact = state.get("outputFormat", "official") == "compact"
     rows = timeline(state)
     c = rows[index]
     mode, assigned = conditioning(state, index)
@@ -245,27 +251,29 @@ def assemble_chunk(state, index, body, media, action_plan=None):
     text = context + "\n\n" + text
     text += (f"\nWRITE THIS TARGET ONLY: {c['duration']} seconds, local 0–{c['duration']}s, "
              f"{position} interval of the sequence; {len(rows)-index-1} clips remain afterward. "
-             "Use [Shot 1] for this continuous target unless the user requested cuts; honor explicit camera requests but otherwise add no camera moves. "
+             + ("Use plain descriptive prose for this target. " if compact else "Use [Shot 1] for this continuous target unless the user requested cuts. ")
+             + "Honor explicit camera requests but otherwise add no camera moves. "
              + ("Match the supplied last frame at this target's end. " if index == len(rows)-1 and state.get("last") else "")
              + "Continue from the preceding clip's end state without replaying it. Use only current media labels. "
-             "Return the official guide's complete sections for this local clip only. "
-             + ("Include standalone Picture definitions for supplied first/last keyframes; other images define Subjects. " if mode == "Reference" else "Use the three Base fields and the selected profile's exact alignment instruction. "))
+             + ("Return a standalone natural-language description followed by overall_soundscape and non_diegetic_music. " if compact else
+                "Return the official guide's complete sections for this local clip only. "
+                + ("Include standalone Picture definitions for supplied first/last keyframes; other images define Subjects. " if mode == "Reference" else "Use the three Base fields and the selected profile's exact alignment instruction. ")))
     text = f"SEQUENCE INSTRUCTIONS FOR THIS REQUEST\n{state['instructions']}\n\n" + text
     if action_plan is not None:
-        text += interval_context(action_plan, index)
+        text += interval_context(action_plan, index, compact=compact)
     text += "\nCamera continuity: retain the existing viewpoint; no tracking, zoom, pan, dolly or cut unless explicitly requested by the user.\n"
-    if mode == "Reference":
+    if mode == "Reference" and not compact:
         text += "Accepted neighboring prompts supply scene context, not a source video. Classify this target using only its effective media: video editing/continuation requires an actual Video asset; keyframe completion applies when First or Last is supplied.\n"
-    text += media_contract(mode, assets) + "\n"
+    text += (COMPACT_CONTRACT if compact else media_contract(mode, assets)) + "\n"
     example = min(5, c["duration"])
     text += (f"FINAL LOCAL CHECK: all output times belong to 0–{c['duration']} seconds, never the global sequence clock. "
              f"For this {c['start']}–{c['end']}s interval, global {c['start']+example}s would be local "
              f"00:{example:02d}.000, after subtracting {c['start']}s. Translate any actual requested event accordingly; "
              "this conversion example does not request a new event. Keep media roles exactly as listed for this target. "
              "An appearance reference is not a first/last frame, even if a neighboring prompt used the same Picture number for a frame.\n")
-    guide = guide_for_mode(mode)
+    guide = {"id": "sequence_compact", "title": "Compact video prompt"} if compact else guide_for_mode(mode)
     return {"schema_version": 1, "completion_policy": "single_call", "guide": {k:v for k,v in guide.items() if k != "content"},
-            "input": {"mode": mode, "duration_seconds": c["duration"], "aspect_ratio": state["aspectRatio"], "creative_brief": state["brief"],
+            "input": {"mode": mode, "output_format": state.get("outputFormat", "official"), "duration_seconds": c["duration"], "aspect_ratio": state["aspectRatio"], "creative_brief": state["brief"],
                       "media_manifest": {"session_id": body["session_id"], "mode": mode, "assets": assets, "valid": True}},
             "media_inputs": inputs, "supporting_guides": [], "system_prompt": {"custom": True, "content": state["instructions"]},
-            "messages": _guide_messages(mode, "") + [{"role": "user", "content": text}]}
+            "messages": ([{"role": "system", "content": COMPACT_CONTRACT}] if compact else _guide_messages(mode, "")) + [{"role": "user", "content": text}]}

@@ -440,6 +440,28 @@ test("Sequence severity uses the existing persistent toast and warning timeout",
   await w.happyDOM.close();
 });
 
+
+
+test("Official/Compact selector preserves custom instructions and uses the existing copy selector style",async()=>{
+  const {COMPACT_SEQUENCE_INSTRUCTIONS,sequenceInstructionDefault}=await import('../web/sequence_state.js');
+  const f=await sequenceFixture(),{workspace:w,root,window,click,input}=f;
+  const instructions=root.querySelector('[data-seq-instructions]');
+  const selector=root.querySelector('[aria-label="Sequence output format"]');
+  assert.equal(selector.className,root.querySelector('[aria-label="Copy format"][role="group"]').className);
+  assert.equal(w.state.outputFormat,'official');
+  click('[data-seq-action="instructions"]');click('[data-seq-action="format-compact"]');
+  assert.equal(w.state.outputFormat,'compact');assert.equal(instructions.value,COMPACT_SEQUENCE_INSTRUCTIONS);
+  assert.match(root.querySelector('[data-seq-contract]').textContent,/Compact.*natural-language/);
+  input(instructions,'My custom instructions stay unchanged');
+  click('[data-seq-action="format-official"]');assert.equal(instructions.value,'My custom instructions stay unchanged');
+  click('[data-seq-action="format-compact"]');assert.equal(instructions.value,'My custom instructions stay unchanged');
+  assert.equal(loadSequence(window.localStorage).outputFormat,'compact');
+  assert.equal(sequenceInputs(w.state).outputFormat,'compact');
+  click('[data-seq-action="reset"]');assert.equal(instructions.value,sequenceInstructionDefault('compact'));
+  click('[data-seq-action="format-official"]');assert.equal(instructions.value,DEFAULT_SEQUENCE_INSTRUCTIONS);
+  await window.happyDOM.close();
+});
+
 test("Sequence transport retains structured planner diagnostics",async()=>{
   const diagnostics={stage:'planning',reason:'step_count',expected_steps:4,received_steps:3};
   const wire=JSON.stringify({type:'error',code:'INVALID_SEQUENCE_PLAN',message:'The model returned 3 of 4 required planning steps.',details:diagnostics})+'\n';
@@ -456,10 +478,10 @@ test("initial Sequence brief is an example only until the user saves or clears i
   for(const brief of ['', 'My own scene']) {
     fresh.brief=brief;saveSequence(io,fresh);assert.equal(loadSequence(io).brief,brief);
   }
-  const {workspace:w,root,window,input}=await sequenceFixture();
+  const {workspace:w,root,window,input,click}=await sequenceFixture();
   assert.equal(root.querySelector('[data-seq-brief]').value,INITIAL_SEQUENCE_BRIEF);
   input(root.querySelector('[data-seq-brief]'),'');
-  w.refresh();
+  click('[data-seq-action="format-compact"]');w.refresh();
   assert.equal(loadSequence(window.localStorage).brief,'');
   assert.equal(root.querySelector('[data-seq-brief]').value,'');
   await window.happyDOM.close();

@@ -96,7 +96,7 @@ def parse_plan(text, count, intervals=None):
     return steps
 
 
-def interval_context(plan, index):
+def interval_context(plan, index, compact=False):
     """Only allocation is inferred. Actual prompts, not planned past steps, own history."""
     step = plan[index]
     pending = "\n".join(f"- {p['progression']} → {p['ending']}" for i, p in sorted(plan.items()) if i > index) or "None"
@@ -107,4 +107,5 @@ def interval_context(plan, index):
             "Start from the actual preceding clip's ending, or establish the opening from the brief and supplied first frame. "
             "Accepted prompts and effective media are evidence; this plan is only an allocation. If a planned event has already happened, "
             "continue its achieved state without replay. Fit any following KEEP prompt's opening. "
-            "Write the development and ending inside the official H3 fields, with enough scene context to stand alone.\n")
+            + ("Write the development and ending in natural-language prose, with enough scene context to stand alone.\n" if compact else
+               "Write the development and ending inside the official H3 fields, with enough scene context to stand alone.\n"))
