@@ -4,5 +4,7 @@ __pycache__/
 scripts/
 standalone/
 tests/
+package.json
+package-lock.json
 docs/dev/standalone/
 *.pyc

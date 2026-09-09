@@ -1,20 +1,21 @@
-# H3 Prompt Writer Standalone v0.1.4
+# H3 Prompt Writer Standalone v0.1.5
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip** from the release assets below.
+Download **H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- **Media Composer:** arrange Pictures and video sheets, add captions, and save a collage as a new Picture. Copy and PNG download are also available.
-- **Media Editor:** crop Pictures, crop and trim videos, and preview analysis frames before saving to Media. Original files stay unchanged.
-- **Light theme and Interface Size:** switch themes and choose a comfortable text and control size from the header.
-- **External llama.cpp routers:** select and unload models on compatible servers.
+- **Sequence mode:** turn one brief into a series of timed clips with consistent action and references. Each clip gets its own complete prompt and can be edited separately.
+- **Compact mode** for Sequence.
+- Improved draft saving, model switching, generation reliability and video playback. Text-only Music 3 is now supported.
+
+Planning helps continuity but does not guarantee natural pacing or exact reference likeness. Some models still omit required H3 fields or stretch short actions. Review prompts before generating video.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.
@@ -41,4 +42,4 @@ libraries are not bundled.
 - Python 3.10 or newer, or `uv`
 - At least one configured provider
 
-Based on H3 Prompt Writer extension `0.4.5`.
+Based on H3 Prompt Writer extension `0.4.6`.

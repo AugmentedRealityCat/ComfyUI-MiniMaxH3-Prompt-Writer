@@ -1,5 +1,12 @@
 # Standalone changelog
 
+## 0.1.5 - 2026-09-09
+
+- Added **Sequence mode**: write a series of timed clips from one brief, keep action and references consistent, and edit each prompt separately.
+- Added **Compact mode** for Sequence.
+- Improved draft saving, model switching, generation reliability and video playback. Added text-only Music 3 and a Linux launcher for source installs.
+- Updated the shared Writer core to `0.4.6`.
+
 ## 0.1.4 - 2026-09-06
 
 - Updated to the shared H3 Prompt Writer `0.4.5` interface and core.

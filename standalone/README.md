@@ -2,13 +2,13 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.4**
+Current Standalone version: **0.1.5**
 
-[Download H3 Prompt Writer Standalone v0.1.4](../../../releases/download/standalone-v0.1.4/H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip)
+[Download H3 Prompt Writer Standalone v0.1.5](../../../releases/download/standalone-v0.1.5/H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip)
 
 ## This is the Standalone version
 
-Development builds also include [Sequence mode](../docs/USAGE.md#sequence) for writing several standalone H3 prompts from one brief. This feature is not included in the published 0.1.4 ZIP.
+[Sequence mode](../docs/USAGE.md#sequence) writes several standalone Official H3 or Compact descriptive prompts from one brief. Set chunk durations, assign First, Last, or Reference media, then generate and refine each part.
 
 You do not need ComfyUI. Do not install this ZIP into ComfyUI `custom_nodes`.
 
@@ -69,12 +69,14 @@ H3_PROJECTOR="/path/to/mmproj.gguf" \
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.4
+## What's new in v0.1.5
 
-- **Media Composer:** combine Pictures and video contact sheets into a collage. Arrange media, add captions, then copy, download, or add the result as a new Picture.
-- **Media Editor:** crop Pictures, crop and trim videos, and preview the frames used for analysis. Save changes to Media or download a copy. Reset restores the original.
-- **Light theme and Interface Size:** use the header buttons to switch themes and choose 100%, 110%, 120%, or 125%. Your choice is saved.
-- **External llama.cpp routers:** select and unload models on compatible servers.
+- **Sequence:** write several independent H3 prompts with shared media and per-chunk directions.
+- **Planning and continuity:** Writer allocates the requested development, then writes each chunk with its own local timing and reference labels.
+- **Draft protection:** completed chunks stay visible after cancellation or a later failure. Earlier versions remain in Undo/Redo.
+- **Copy All:** use plain prompts or customize the template and separator in Reader.
+
+See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
 Open a media card to edit it. In Reference mode, use **Actions → Compose** to create
 a collage from existing Pictures and video sheets. Editing does not overwrite your
@@ -171,6 +173,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

@@ -8,12 +8,13 @@ H3 Prompt Writer is a prompt-writing workspace for MiniMax H3 inside ComfyUI. St
 
 It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing H3 workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Writer does not run MiniMax H3 or queue a video.
 
-ComfyUI extension: **0.4.5** · [Download ZIP](../../releases/download/v0.4.5/H3-Prompt-Writer-ComfyUI-v0.4.5.zip) · [Installation](docs/INSTALLATION.md)
+ComfyUI extension: **0.4.6** · [Download ZIP](../../releases/download/v0.4.6/H3-Prompt-Writer-ComfyUI-v0.4.6.zip) · [Installation](docs/INSTALLATION.md)
 
-Standalone for Windows: **0.1.4** · [Download ZIP](../../releases/download/standalone-v0.1.4/H3-Prompt-Writer-Standalone-Windows-v0.1.4.zip) · [Setup guide](standalone/README.md)
+Standalone for Windows: **0.1.5** · [Download ZIP](../../releases/download/standalone-v0.1.5/H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip) · [Setup guide](standalone/README.md)
 
 ## Highlights
 
+- Sequence: write several independent H3 prompts from one brief, with shared media and per-chunk edits.
 - Media Composer: combine pictures and video contact sheets into a collage.
 - Media Editor: crop images, trim and crop video, and extract frames.
 - Floating Media panel: drag Writer media into ComfyUI workflows.
@@ -25,6 +26,7 @@ Standalone for Windows: **0.1.4** · [Download ZIP](../../releases/download/stan
 
 ## Releases
 
+**v0.4.6**: Sequence workspace with Official and Compact output, internal planning, format recovery, shared highlighting, and per-chunk refinement.\
 **v0.4.5**: Media Composer, Media Editor, Floating Media, themes, and runtime improvements.\
 **v0.4.4**: Standalone, Qwen 3.8 and Qwen3-VL, expanded Direct GGUF support.\
 **v0.3**: Redesigned Writer, Ollama/API/External setup, and per-mode drafts.
@@ -39,11 +41,11 @@ You do not need to write MiniMax section headings, timestamps, or reference synt
 Use <Picture 1> for character appearance, <Picture 2> for clothes, and only the movement from <Video 1>. The character walks through a rainy Tokyo street at night.
 ```
 
-Writer sends your brief, selected mode, prepared references, and the official MiniMax prompt-writing guide to the chosen prompt model. The result is an editable H3 prompt. You can change it directly, use **Refine** for a revision, or select **Copy prompt** and paste it into your H3 workflow.
+Writer sends your brief, selected mode, prepared references, and the selected writing contract to the prompt model. Single and Official Sequence use the official MiniMax guide. Compact Sequence uses descriptive prose with brief sound and music fields. The result is an editable H3 prompt. You can change it directly, use **Refine** for a revision, or select **Copy prompt** and paste it into your H3 workflow.
 
 ## Key features
 
-- Sequence workspace: plan a longer brief across editable chunks, each a standalone official H3 prompt. See [Sequence usage](docs/USAGE.md#sequence). Available in this development branch; not included in the release ZIPs linked above.
+- Sequence workspace: plan a longer brief across editable chunks, with Official H3 structure or Compact descriptive prose. See [Sequence usage](docs/USAGE.md#sequence).
 - T2VA, I2VA, FL2VA, L2VA, and Reference modes.
 - Up to 9 images, 3 videos, and 3 audio references in Reference mode.
 - Clear `<Picture N>`, `<Video N>`, and `<Audio N>` labels for assigning identity, wardrobe, setting, motion, camera, sound, or other roles.

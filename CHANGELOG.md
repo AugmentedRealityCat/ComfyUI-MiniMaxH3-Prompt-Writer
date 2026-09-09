@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.6 - 2026-09-09
+
+- Added **Sequence mode**: turn one brief into a series of timed clips with consistent action and references. Each clip gets its own complete prompt and can be edited separately.
+- Added **Compact mode** for Sequence.
+- Fixed Direct GGUF model loading with newer compatible runtimes. Thanks to @Bloodborne9876 ([#25](https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/pull/25)).
+- Also improved draft saving, model switching and generation reliability, fixed video playback controls, enabled text-only Music 3, and added a Linux launcher for Standalone.
+
 ## 0.4.5 - 2026-09-06
 
 ### Features

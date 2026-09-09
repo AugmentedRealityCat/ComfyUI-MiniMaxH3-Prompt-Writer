@@ -70,8 +70,19 @@ New-Item -ItemType Directory -Force -Path (Join-Path $target "models") | Out-Nul
 
 $upstreamTarget = Join-Path $target "upstream"
 New-Item -ItemType Directory -Force -Path $upstreamTarget | Out-Null
-foreach ($name in @("backend", "web", "guides", "models.json", "LICENSE")) {
+foreach ($name in @("backend", "web", "guides", "docs", "README.md", "CHANGELOG.md", "models.json", "LICENSE")) {
     Copy-TrackedTree $name (Join-Path $upstreamTarget $name)
+}
+# Keep the repository's shared documentation links usable inside the ZIP.
+$readmePath = Join-Path $target "README.md"
+$readme = [IO.File]::ReadAllText($readmePath).Replace("../docs/", "upstream/docs/").Replace("../README.md", "upstream/README.md")
+[IO.File]::WriteAllText($readmePath, $readme, [Text.UTF8Encoding]::new($false))
+$upstreamReadmePath = Join-Path $upstreamTarget "README.md"
+$upstreamReadme = [IO.File]::ReadAllText($upstreamReadmePath).Replace("(standalone/README.md)", "(../README.md)")
+[IO.File]::WriteAllText($upstreamReadmePath, $upstreamReadme, [Text.UTF8Encoding]::new($false))
+foreach ($doc in Get-ChildItem -LiteralPath (Join-Path $upstreamTarget "docs") -Filter "*.md") {
+    $content = [IO.File]::ReadAllText($doc.FullName).Replace("../standalone/README.md", "../../README.md")
+    [IO.File]::WriteAllText($doc.FullName, $content, [Text.UTF8Encoding]::new($false))
 }
 $versionSource = [IO.File]::ReadAllText((Join-Path $repositoryRoot "backend\version.py"))
 $extensionMatch = [regex]::Match($versionSource, 'VERSION\s*=\s*"([^"]+)"')
