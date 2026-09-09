@@ -83,7 +83,7 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("windowed: false", shell)
         self.assertIn("comfyMemory: false", shell)
         self.assertIn("workflowMedia: false", shell)
-        for path in ("/media_composer.js", "/media_editor.js", "/styles/tokens.css", "/styles/themes/light.css", "/styles/composer.css", "/styles/editor.css", "/sequence_workspace.js", "/sequence_controller.js", "/api/sequence.js", "/styles/sequence.css"):
+        for path in ("/media_composer.js", "/media_editor.js", "/styles/tokens.css", "/styles/themes/light.css", "/styles/composer.css", "/styles/editor.css", "/sequence_workspace.js", "/prompt_highlights.js", "/sequence_controller.js", "/api/sequence.js", "/styles/sequence.css"):
             response = await self.client.get(path)
             self.assertEqual(response.status, 200, path)
 

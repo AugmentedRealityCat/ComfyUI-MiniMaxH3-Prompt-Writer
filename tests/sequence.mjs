@@ -440,7 +440,37 @@ test("Sequence severity uses the existing persistent toast and warning timeout",
   await w.happyDOM.close();
 });
 
+test("shared prompt highlighting is lossless, escaped and preserves dialogue as one unit",async()=>{
+  const {promptHighlightMarkup}=await import('../web/prompt_highlights.js');
+  const w=new Window(),view=w.document.createElement('pre');
+  const text='subject_definitions: <Subject 1> from <Picture 1>\nsummary: A room\ndetailed_description: [Shot 1] At 00:05.000, <Video 1> and <Audio 1>. <d>[English] Say <Picture 99> & \\"words\\".</d>\n<script>alert(1)</script>';
+  view.innerHTML=promptHighlightMarkup(text);
+  assert.equal(view.textContent,text);
+  assert.equal(view.querySelector('script'),null);
+  for(const kind of ['section','subject','image','video','audio','shot','time','dialogue'])assert.ok(view.querySelector('mark.is-'+kind),kind);
+  assert.equal(view.querySelector('mark.is-dialogue mark'),null);
+  assert.equal(view.querySelectorAll('mark.is-image').length,1);
+  assert.equal(promptHighlightMarkup(''), '');
+  await w.happyDOM.close();
+});
 
+test("Sequence highlights follow editing and Undo while Reader and Copy retain exact text",async()=>{
+  const f=await sequenceFixture(),{workspace:w,root,window,input,click,copies,flush}=f;
+  const prompt='integrated_multimodal_description: [Shot 1] At 00:05.000 she turns to <Picture 1>.\n\noverall_soundscape: Quiet.';
+  const editor=root.querySelector('[data-seq-prompt]');input(editor,prompt);
+  editor.setSelectionRange(10,30);w.refresh();
+  assert.equal(editor.selectionStart,10);assert.equal(editor.selectionEnd,30);
+  const layer=root.querySelector('[data-seq-highlights]');
+  assert.equal(layer.getAttribute('aria-hidden'),'true');assert.equal(layer.textContent,prompt+'\n');
+  assert.ok(layer.querySelector('.is-time'));assert.ok(layer.querySelector('.is-image'));
+  click('[data-seq-action="reader"]');const reader=root.querySelector('[data-seq-reader-text]');
+  assert.equal(reader.textContent,prompt);assert.ok(reader.querySelector('.is-section'));
+  click('[data-seq-action="copy"]');await flush();assert.equal(copies.at(-1),prompt);
+  click('[data-seq-action="reader"]');replacePrompt(w.state.chunks[0],'new version');w.refresh();
+  click('[data-seq-action="undo"]');assert.equal(editor.value,prompt);assert.equal(layer.textContent,prompt+'\n');
+  input(editor,'');assert.equal(layer.querySelector('mark'),null);
+  await window.happyDOM.close();
+});
 
 test("Official/Compact selector preserves custom instructions and uses the existing copy selector style",async()=>{
   const {COMPACT_SEQUENCE_INSTRUCTIONS,sequenceInstructionDefault}=await import('../web/sequence_state.js');
@@ -487,6 +517,24 @@ test("initial Sequence brief is an example only until the user saves or clears i
   await window.happyDOM.close();
 });
 
+test("Compact highlighting follows format selection without changing text or selection",async()=>{
+  const {workspace:w,root,window,input,click}=await sequenceFixture();
+  const prompt='She sees <Picture 1> beside a window. [Shot 1] At 00:05.000 she turns.\n\noverall_soundscape:\nQuiet room.\n\nnon_diegetic_music:\nN/A';
+  const editor=root.querySelector('[data-seq-prompt]');input(editor,prompt);
+  editor.setSelectionRange(3,12);
+  click('[data-seq-action="format-compact"]');
+  const layer=root.querySelector('[data-seq-highlights]');
+  assert.equal(layer.textContent,prompt+'\n');assert.equal(editor.value,prompt);
+  assert.equal(editor.selectionStart,3);assert.equal(editor.selectionEnd,12);
+  assert.deepEqual([...layer.querySelectorAll('mark')].map(m=>m.textContent),['<Picture 1>','overall_soundscape:','non_diegetic_music:']);
+  click('[data-seq-action="reader"]');
+  assert.equal(root.querySelector('[data-seq-reader-text]').textContent,prompt);
+  assert.equal(root.querySelectorAll('[data-seq-reader-text] mark').length,3);
+  click('[data-seq-action="format-official"]');
+  assert.ok(layer.querySelector('.is-time'));assert.ok(layer.querySelector('.is-shot'));
+  await window.happyDOM.close();
+});
+
 test("Sequence text fields disable browser spelling underlines",async()=>{
   const {workspace:w,root,window,click}=await sequenceFixture();
   click('[data-seq-action="add"]');w.refresh();
@@ -494,4 +542,35 @@ test("Sequence text fields disable browser spelling underlines",async()=>{
   assert.ok(fields.length>4);
   for(const field of fields)assert.equal(field.getAttribute('spellcheck'),'false');
   await window.happyDOM.close();
+});
+
+test("Sequence overlay and editor share shaping at every interface scale",async()=>{
+  const css=await readFile(new URL('../web/styles/sequence.css',import.meta.url),'utf8');
+  const shared=css.match(/:is\(\.h3ps-sequence-prompt,\.h3ps-sequence-highlights,\.h3ps-sequence-reader-text\)\{([^}]+)\}/)[1];
+  for(const rule of ['font-kerning:none','font-variant-ligatures:none','letter-spacing:0','word-spacing:0','font-weight:400','text-rendering:geometricPrecision'])assert.ok(shared.includes(rule),rule);
+  assert.match(css,/\.h3ps-sequence-chunk\{position:relative;z-index:0;/);
+});
+
+test("native highlight ranges keep one mirror text run and release obsolete ranges",async()=>{
+  const {createPromptMirrorHighlighter,promptHighlightMarkup}=await import('../web/prompt_highlights.js');
+  const w=new Window(),doc=w.document;
+  Object.defineProperty(w,'CSS',{value:{highlights:new Map()},configurable:true});
+  w.Highlight=class extends Set {};
+  const painter=createPromptMirrorHighlighter(doc),a=doc.createElement('div'),b=doc.createElement('div');
+  const text='[Shot 1] From <Picture 1>, <Subject 1> speaks. At 00:05.000 she sings.\n';
+  painter.paint(a,promptHighlightMarkup(text));
+  painter.paint(b,promptHighlightMarkup(text));
+  assert.equal(a.childNodes.length,1);assert.equal(a.textContent,text);
+  assert.equal(a.querySelector('mark'),null);
+  const times=w.CSS.highlights.get('h3ps-sequence-time');
+  assert.equal(times.size,2);
+  for(const range of times) assert.equal(range.toString(),'00:05.000');
+  painter.clear();assert.equal(w.CSS.highlights.size,0);
+  painter.paint(a,promptHighlightMarkup(text,'compact'));
+  assert.deepEqual([...w.CSS.highlights.keys()],['h3ps-sequence-image']);
+  assert.equal(a.childNodes.length,1);assert.equal(a.textContent,text);
+  painter.clear();
+  painter.paint(a,promptHighlightMarkup(''));
+  assert.equal(w.CSS.highlights.size,0);assert.equal(a.textContent,'');
+  await w.happyDOM.close();
 });

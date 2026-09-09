@@ -1,3 +1,4 @@
+import { promptHighlightMarkup } from "./prompt_highlights.js";
 import { generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
@@ -317,19 +318,7 @@ function renderPromptHighlights() {
   const editor = studio.root.querySelector("[data-output]");
   const layer = studio.root.querySelector("[data-prompt-highlights]");
   if (!editor || !layer) return;
-  const tokens = /(?<dialogue>&lt;d&gt;[\s\S]*?&lt;\/d&gt;)|(?<media>@(?:Image|Video|Audio)\d+|&lt;(?:Picture|Video|Audio)\s+\d+&gt;)|(?<subject>&lt;Subject\s+\d+&gt;)|(?<section>^(?:(?:subject_definitions|summary|retention_analysis|detailed_description|integrated_multimodal_description|overall_soundscape|non_diegetic_music):|###\s+(?:Global Metadata|Vocal Details|Arrangement)\s*$))|(?<shot>\[(?:Shot\s+\d+|Intro|Verse(?:\s+\d+)?|Pre-Chorus|Chorus(?:\s+\d+)?|Bridge|Instrumental|Final Chorus|Outro)\])|(?<time>\b(?:\d{1,2}:\d{2}(?:\.\d{1,3})?|\d+(?:\.\d+)?\s+seconds?)\b)/gim;
-  layer.innerHTML = escapeHtml(editor.value).replace(tokens, (match, ...args) => {
-    const groups = args.at(-1);
-    if (groups.media) {
-      const parsed = match.match(/@(?<legacy>Image|Video|Audio)(?<legacyNumber>\d+)|&lt;(?<official>Picture|Video|Audio)\s+(?<officialNumber>\d+)&gt;/)?.groups || {};
-      const type = parsed.official || (parsed.legacy === "Image" ? "Picture" : parsed.legacy);
-      const number = parsed.officialNumber || parsed.legacyNumber;
-      const mediaClass = type === "Picture" ? "image" : type.toLowerCase();
-      return `<mark class="is-${mediaClass}" data-prompt-reference="<${type} ${number}>">${match}</mark>`;
-    }
-    const kind = groups.subject ? "subject" : groups.section ? "section" : groups.shot ? "shot" : groups.time ? "time" : "dialogue";
-    return `<mark class="is-${kind}">${match}</mark>`;
-  }) + "\n";
+  layer.innerHTML = promptHighlightMarkup(editor.value) + "\n";
   layer.scrollTop = editor.scrollTop;
   layer.scrollLeft = editor.scrollLeft;
 }

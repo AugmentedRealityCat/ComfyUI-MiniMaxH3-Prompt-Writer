@@ -18,13 +18,13 @@
 .h3ps-sequence-slot[data-asset]:not([data-asset=""]) .h3ps-add-asset{border-style:solid;cursor:default}
 .h3ps-sequence-slot img{width:30px;height:30px;object-fit:cover;border-radius:var(--h3ps-radius-sm)}
 .h3ps-sequence-slot .h3ps-add-asset svg{margin:0}.h3ps-sequence-slot .h3ps-add-asset span{font-size:var(--h3ps-font-caption);white-space:nowrap}
-.h3ps-sequence-chunk{border-bottom:1px solid var(--h3ps-divider);padding:20px 0 24px}
+.h3ps-sequence-chunk{position:relative;z-index:0;border-bottom:1px solid var(--h3ps-divider);padding:20px 0 24px}
 .h3ps-sequence-chunk>header>strong{margin-right:auto;font-size:var(--h3ps-font-control);font-weight:600;color:var(--h3ps-text);font-variant-numeric:tabular-nums;user-select:none}
 .h3ps-sequence-duration{display:inline-flex;align-items:center;gap:3px;color:var(--h3ps-muted);font-variant-numeric:tabular-nums}
 .h3ps-sequence-duration>span{min-width:3ch;text-align:center}
 .h3ps-sequence-conditioning{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0}
 .h3ps-sequence-output .h3ps-sequence-instruction{width:100%;margin:10px 0 0;padding:6px 0;border:0;background:transparent;color:var(--h3ps-text);font-size:var(--h3ps-font-control)}
-.h3ps-sequence-prompt,.h3ps-sequence-reader-text{display:block;width:100%;resize:none;border:0;color:var(--h3ps-text-panel-heading);background:transparent;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:var(--h3ps-font-body-sm)!important;line-height:1.68!important;padding:12px 0;overflow:hidden;max-height:none;white-space:pre-wrap;overflow-wrap:anywhere}
+.h3ps-sequence-prompt,.h3ps-root .h3ps-sequence-output .h3ps-sequence-reader-text,.h3ps-root .h3ps-sequence-output .h3ps-sequence-highlights{display:block;width:100%;resize:none;border:0;color:var(--h3ps-text-panel-heading);background:transparent;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:var(--h3ps-font-body-sm)!important;line-height:1.68!important;padding:12px 0;overflow:hidden;max-height:none;white-space:pre-wrap;overflow-wrap:anywhere}
 .h3ps-sequence-chunk-actions{display:flex;align-items:center;gap:8px;padding-top:12px;margin-top:10px;border-top:1px solid var(--h3ps-divider-soft)}
 .h3ps-sequence-chunk-actions>button{min-height:32px;min-width:32px;padding:6px 8px}
 .h3ps-sequence-chunk-actions>button:hover:not(:disabled),.h3ps-sequence-output .h3ps-icon-button:hover:not(:disabled),.h3ps-sequence-slot>.h3ps-icon-button:hover:not(:disabled){color:var(--h3ps-accent)}
@@ -74,5 +74,25 @@
 .h3ps-sequence-attention>div{position:absolute;z-index:5;top:100%;right:0;width:360px;max-width:100%;max-height:45vh;overflow:auto;padding:14px;background:var(--h3ps-surface);color:var(--h3ps-text);border:1px solid var(--h3ps-border);border-radius:8px;box-shadow:0 6px 20px #0002;font-size:var(--h3ps-font-body-sm);line-height:1.5;font-weight:400}
 .h3ps-sequence-attention p{white-space:pre-wrap;margin:8px 0 0;overflow-wrap:anywhere}
 .h3ps-sequence-attention:not([open]):hover>div,.h3ps-sequence-attention:not([open]):focus-within>div{display:block}
+
+/* Match the textarea exactly; highlighting never intercepts selection or caret placement. */
+.h3ps-sequence-editor{position:relative}
+/* Inline token boundaries must not change glyph shaping at fractional font sizes. */
+.h3ps-root .h3ps-sequence-output :is(.h3ps-sequence-prompt,.h3ps-sequence-highlights,.h3ps-sequence-reader-text){font-weight:400;font-style:normal;font-kerning:none;font-variant:normal;font-variant-ligatures:none;letter-spacing:0;word-spacing:0;text-indent:0;tab-size:8;text-rendering:geometricPrecision}
+.h3ps-sequence-output .h3ps-editor-highlight mark{font:inherit;letter-spacing:inherit;word-spacing:inherit;font-kerning:inherit;font-variant-ligatures:inherit}
+.h3ps-root .h3ps-sequence-output .h3ps-sequence-highlights{position:absolute;inset:0;min-height:0;height:100%;margin:0;color:transparent;pointer-events:none}
+.h3ps-sequence-output .h3ps-editor-highlight mark{pointer-events:none;cursor:inherit}
+.h3ps-sequence-output .h3ps-sequence-reader-text.h3ps-editor-highlight{position:static;min-height:0;margin:0;color:var(--h3ps-text-panel-heading);pointer-events:auto}
+.h3ps-sequence-reader-text.h3ps-editor-highlight mark{color:inherit}
+
+/* Range backgrounds do not split or reshape the mirror's text runs. */
+.h3ps-sequence-highlights::highlight(h3ps-sequence-image){background-color:rgba(100,156,255,.2);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-video){background-color:rgba(191,119,255,.2);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-audio){background-color:rgba(99,212,155,.18);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-subject){background-color:rgba(255,151,102,.15);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-section){background-color:rgba(255,115,86,.14);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-shot){background-color:rgba(255,178,71,.13);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-time){background-color:rgba(90,196,218,.12);color:transparent}
+.h3ps-sequence-highlights::highlight(h3ps-sequence-dialogue){background-color:rgba(218,121,176,.11);color:transparent}
 
 .h3ps-sequence-instructions-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}

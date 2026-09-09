@@ -1,3 +1,4 @@
+import { promptHighlightMarkup, createPromptMirrorHighlighter } from "./prompt_highlights.js";
 import { loadSequence, saveSequence, addChunk, deleteChunk, timeline, effectiveMedia, aggregate, duration, MAX_CHUNK_DURATION, sequenceInstructionDefault, setSequenceFormat, revisePrompt, assignReference, removeReference, reconcileMedia } from "./sequence_state.js";
 import { createSequenceController } from "./sequence_controller.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
@@ -12,6 +13,7 @@ const paths = { undo:'<path d="M9 5 4 10l5 5M4 10h9a6 6 0 0 1 6 6v3"/>', redo:'<
 
 export function createSequenceWorkspace(host) {
   const { root } = host, state = loadSequence(host.storage);
+  const highlights = createPromptMirrorHighlighter(root.ownerDocument);
   let enabled = false, reader = false, selection = null, activeTarget = null;
   const chunks = new Map(), refineDrafts = new Map(), promptCarets = new Map();
   const svg = name => paths[name] ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>` : host.icon(name,15);
@@ -127,12 +129,13 @@ export function createSequenceWorkspace(host) {
     section.innerHTML=`<header><strong data-seq-heading></strong><small class="h3ps-sequence-progress" data-seq-status role="status"></small><details class="h3ps-sequence-attention" data-seq-attention hidden><summary aria-label="Prompt needs attention" aria-describedby="h3ps-seq-help-${escape(c.id)}" title="Model output needs review"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3v1"/></svg></summary><div><strong>The model could not finish formatting this prompt</strong><p data-seq-help id="h3ps-seq-help-${escape(c.id)}"></p></div></details><div class="h3ps-sequence-duration" data-seq-chrome>${iconButton("decrease","Shorten chunk by one second","minus")}<span data-seq-duration></span>${iconButton("increase","Lengthen chunk by one second","plus")}</div>${iconButton("delete","Delete chunk","close",'data-seq-chrome')}</header>
       <input spellcheck="false" class="h3ps-sequence-instruction" data-seq-instruction data-seq-chrome placeholder="Optional direction for this chunk…" title="Used whenever AI writes or refines this chunk.">
       <div class="h3ps-sequence-conditioning" data-seq-chrome aria-label="Chunk conditioning"></div>
-      <textarea spellcheck="false" class="h3ps-sequence-prompt" data-seq-prompt data-seq-chrome placeholder="The generated H3 prompt will appear here"></textarea><pre class="h3ps-sequence-reader-text" data-seq-reader-text hidden></pre>
+      <div class="h3ps-sequence-editor" data-seq-chrome><div class="h3ps-editor-highlight h3ps-sequence-highlights" data-seq-highlights aria-hidden="true"></div><textarea spellcheck="false" class="h3ps-sequence-prompt" data-seq-prompt data-seq-chrome placeholder="The generated H3 prompt will appear here"></textarea></div><pre class="h3ps-sequence-reader-text h3ps-editor-highlight" data-seq-reader-text hidden></pre>
       <div class="h3ps-sequence-chunk-actions" data-seq-chrome>${button("refine-open","Refine")}${button("generate","Regenerate")}${copyButtonMarkup(host.icon,'data-seq-action="copy" title="Copy prompt" aria-label="Copy prompt"')}${iconButton("undo","Undo AI replacement","undo")}${iconButton("redo","Redo AI replacement","redo")}</div>
       <div class="h3ps-refine" data-seq-refine data-seq-chrome hidden><div class="h3ps-refine-heading"><span><strong data-seq-refine-title></strong><small>Describe only what should change</small></span></div><textarea spellcheck="false" data-seq-refine-instruction placeholder="Describe only what should change"></textarea><div class="h3ps-refine-actions">${button("refine-close","Cancel")}<button type="button" class="h3ps-refine-submit" data-seq-action="refine">${host.icon("spark",13)} Refine</button></div></div>`;
     return section;
   }
   function render() {
+    highlights.clear();
     const scroll=right.scrollTop, rows=timeline(state), list=right.querySelector(".h3ps-sequence-chunks");
     const ids=new Set(rows.map(c=>c.id));
     for(const [id,el] of chunks) if(!ids.has(id)) { el.remove(); chunks.delete(id); refineDrafts.delete(id); }
@@ -151,7 +154,8 @@ export function createSequenceWorkspace(host) {
       el.querySelector("[data-seq-duration]").textContent=`${c.duration}s`;
       for(const [selector,value] of [["[data-seq-instruction]",c.instruction],["[data-seq-prompt]",controller.busy && status ? "" : c.prompt]]) { const input=el.querySelector(selector); if(input.value!==value) input.value=value; input.setAttribute("aria-label",`Chunk ${c.index} ${selector.includes("prompt")?"prompt":"direction"}`); }
       // Reader is a projection of the canonical prompt, never a separately edited draft.
-      el.querySelector("[data-seq-reader-text]").textContent=c.prompt;
+      highlights.paint(el.querySelector("[data-seq-highlights]"),promptHighlightMarkup(el.querySelector("[data-seq-prompt]").value,state.outputFormat) + "\n");
+      setMarkup(el.querySelector("[data-seq-reader-text]"),promptHighlightMarkup(c.prompt,state.outputFormat));
       el.querySelector("[data-seq-reader-text]").hidden=!reader;
       setMarkup(el.querySelector(".h3ps-sequence-conditioning"), effectiveMedia(state,c.id,host.assets()).map(m=>m.role==="Reference" ? slot("references",m.assetId,m.tag,c.id) : slot(m.role==="First frame"?"first":"last",m.assetId,m.tag===m.role ? m.role : `${m.role} · ${m.tag}`,c.id,false)).join("")+slot("references","","",c.id));
       el.querySelector("[data-seq-refine-title]").textContent=`Refine chunk ${String(c.index).padStart(2,"0")}`;
@@ -306,7 +310,7 @@ export function createSequenceWorkspace(host) {
   render();
   return { get active(){return enabled;}, get reader(){return reader;}, state, controller, mediaMode:mode=>enabled?"Reference":mode,
     refresh(){ if(enabled && !controller.busy && reconcileMedia(state,host.assets())) persist(); render(); },
-    leave(){controller.leave();selection=null;setReader(false);},
+    leave(){controller.leave();selection=null;setReader(false);highlights.clear();},
     insert(assetId){
       if(!enabled) return false;
       if(controller.busy || reader || selection) return true;

@@ -77,7 +77,7 @@ Chunk ranges show global sequence time. Prompt timestamps start at zero within e
 
 ### Reading and copying
 
-Edit prompts in place or use **Reader** for a compact view. A chunk's copy button copies its prompt. **Copy All** copies nonempty prompts in sequence order. If a chunk needs attention, fix it first; individual Copy remains available. Reader keeps the same attention indicator. **Default** separates them with blank lines. **Custom** applies a chunk template and a separator without changing the saved prompts.
+Edit prompts in place or use **Reader** for a compact view. Official uses Single mode colors for H3 sections, subjects, media tags, shots, timing, and dialogue. Compact highlights `<Picture N>`, `overall_soundscape:` and `non_diegetic_music:`. Highlighting is a reading aid, not a validation result; copied text stays plain. A chunk's copy button copies its prompt. **Copy All** copies nonempty prompts in sequence order. If a chunk needs attention, fix it first; individual Copy remains available. Reader keeps the same attention indicator. **Default** separates them with blank lines. **Custom** applies a chunk template and a separator without changing the saved prompts.
 
 Templates support `{prompt}`, `{index}`, `{start}`, `{end}`, and `{duration}`. Times are global seconds. Try **Divider**, **Time ranges**, **Numbered**, or **Chapters**. The separator field displays escapes such as `\n\n---\n\n` visibly; copying turns `\n`, `\r`, `\t`, and `\\` into their literal characters. This is template formatting, not a regular-expression engine.
 
