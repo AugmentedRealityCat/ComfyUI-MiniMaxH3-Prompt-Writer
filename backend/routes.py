@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -28,6 +29,7 @@ from .models.contract import ModelError
 from .runtime_diagnostics import get_gguf_runtime_diagnostics
 from .system_prompts import SystemPromptError, system_prompt_for_mode
 from .version import VERSION
+from .sequence_routes import register_sequence_routes
 
 
 ROUTE_PREFIX = "/h3studio"
@@ -1326,3 +1328,6 @@ async def reorder_media(request: web.Request) -> web.Response:
         return _media_error(error)
     _invalidate_generation_cache(session_id, body["mode"])
     return web.json_response({"assets": assets})
+
+
+register_sequence_routes(routes, sys.modules[__name__])

@@ -83,7 +83,7 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("windowed: false", shell)
         self.assertIn("comfyMemory: false", shell)
         self.assertIn("workflowMedia: false", shell)
-        for path in ("/media_composer.js", "/media_editor.js", "/styles/tokens.css", "/styles/themes/light.css", "/styles/composer.css", "/styles/editor.css"):
+        for path in ("/media_composer.js", "/media_editor.js", "/styles/tokens.css", "/styles/themes/light.css", "/styles/composer.css", "/styles/editor.css", "/sequence_workspace.js", "/sequence_controller.js", "/api/sequence.js", "/styles/sequence.css"):
             response = await self.client.get(path)
             self.assertEqual(response.status, 200, path)
 
@@ -91,6 +91,14 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         payload = await response.json()
         self.assertGreater(len(payload["setup"]), 0)
         self.assertTrue(all(item.get("model_url") for item in payload["setup"]))
+
+    async def test_sequence_routes_exist_without_a_comfy_graph(self) -> None:
+        response = await self.client.post("/h3studio/sequence", json={})
+        self.assertEqual(response.status, 400)
+        self.assertIn("INVALID_SEQUENCE", await response.text())
+        response = await self.client.post("/h3studio/sequence/cancel", json={"operation_id": "stale", "session_id": "test"})
+        self.assertEqual(response.status, 200)
+        self.assertFalse((await response.json())["cancelled"])
 
     async def test_media_editor_and_composer_picture_roundtrip_without_comfyui(self) -> None:
         session = "22222222-3333-4444-8555-666666666666"

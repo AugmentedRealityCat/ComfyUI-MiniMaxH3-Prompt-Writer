@@ -31,6 +31,48 @@ The sun/moon button switches between Dark and Light. The **Aa** button adjusts *
 
 Duration and aspect ratio become part of the request. The generated text remains editable before you copy it.
 
+## Sequence
+
+Choose **Sequence** to write several H3 prompts from one Creative Brief. Add chunks and set their durations, from 1 to 15 seconds each. **New chunk duration** applies to the next added chunk. On first use, a short example fills Creative Brief while chunk prompts stay empty. Edit or clear it; saved edits and empty briefs stay as you left them. The sequence keeps its own draft. It does not join videos, connect a workflow, or assume how you will use the chunks.
+
+For a multi-chunk operation, Writer makes one internal semantic planning call to allocate development and intended ending states for the requested chunks. It then makes one generation call per requested chunk, in order. A sequence with only one chunk skips planning. Each result is a full standalone official MiniMax H3 prompt, with its own scene description and local `[Shot 1]` numbering.
+
+The brief and explicit instructions govern intent. Current media and visible prompts, including manual edits, supply scene evidence. The planner reads your original brief, Chunk Direction and objective chunk boundaries. It interprets timing in your own words, without an application-side language parser. The temporary plan distributes events, speech, atmosphere, or sustained activity. It does not require a new action at every boundary or invent a conclusion for an open-ended brief. Each writer continues the actual preceding ending and considers any following accepted opening. Planning is rebuilt for each operation. **Sequence Instructions** lets you adjust shared writing directions. No camera moves or cuts are requested unless you ask for them; added behavior stays modest and consistent with the brief.
+
+### Media and guides
+
+| Assignment | Scope |
+| --- | --- |
+| First | Opening frame of the first chunk only |
+| Last | Closing frame of the last chunk only |
+| Reference | Shared references, with additions or exclusions for individual chunks |
+
+Writer selects the guide for each chunk's effective media. With references, it uses the official Reference guide. Otherwise it uses the official Base guide: T2VA with no frames, I2VA with First, L2VA with Last, or FL2VA with both. First and Last can also accompany references. Uploading a file does not assign it automatically. The Reference summary starts with an official task prefix. For example, `[keyframe completion + reference generation]` is correct when a frame anchor and an appearance reference are supplied. Keep this prefix.
+
+In the shared brief, use **first frame**, **last frame**, and **reference 1**. In a chunk field, use the tags shown for that chunk. Tags such as `<Picture 1>` are local to each request and can refer to different files in different chunks. The planner reads text and assignment roles; prepared images and video contact sheets go to the chunk writer. Describe audio roles in text, as in Single mode.
+
+### Timing and edits
+
+Chunk ranges show global sequence time. Prompt timestamps start at zero within each chunk. For example, an event at global 25 seconds belongs at local `00:05.000` in a chunk covering 20–30 seconds. Write global event timing in the shared brief and local directions in **Chunk Direction**.
+
+**Chunk Direction** affects that chunk when generated or refined. **Generate sequence** fills empty chunks and retries prompts that need attention. Other prompts stay unchanged. Once all chunks are usable, **Regenerate sequence** rewrites them all. Use a chunk's **Generate** or **Regenerate** to write only that chunk. **Refine** uses its current edited prompt, revision instruction, shared brief, directions, effective media, and existing neighbors. It rewrites only the selected chunk. Editing an earlier chunk does not automatically rewrite later chunks.
+
+### Reading and copying
+
+Edit prompts in place or use **Reader** for a compact view. A chunk's copy button copies its prompt. **Copy All** copies nonempty prompts in sequence order. If a chunk needs attention, fix it first; individual Copy remains available. Reader keeps the same attention indicator. **Default** separates them with blank lines. **Custom** applies a chunk template and a separator without changing the saved prompts.
+
+Templates support `{prompt}`, `{index}`, `{start}`, `{end}`, and `{duration}`. Times are global seconds. Try **Divider**, **Time ranges**, **Numbered**, or **Chapters**. The separator field displays escapes such as `\n\n---\n\n` visibly; copying turns `\n`, `\r`, `\t`, and `\\` into their literal characters. This is template formatting, not a regular-expression engine.
+
+### Limits and failures
+
+Planning improves continuity but does not guarantee natural pacing or exact visual fidelity. Some models still stretch a short action across chunks. Review the boundary states, reference tags, and timing before using the prompts. Clear directions help when a brief provides too little action for the requested duration.
+
+A structurally invalid plan stops generation with an error. There is no fallback or hidden semantic repair. Lossless cleanup removes a complete outer Markdown fence and normalizes unambiguous local timestamp typos such as `05:000` to `00:05.000`. A value like `05:00` is normalized only when the chunk duration leaves one plausible in-range time, such as five seconds in a ten-second chunk. It never invents sections, moves events, or rewrites dialogue. Format-specific checks reject incomplete required content, invalid local shots or timestamps, unavailable media labels, and missing required frame anchors. It checks syntax and media contracts, not story quality.
+
+For image-only Reference inputs, Writer corrects impossible video/audio task labels from the assigned media roles. This changes only task metadata. Writer then allows at most one automatic H3 format correction per chunk, using the same guide and media. It does not change the plan or intentionally rewrite scene content. Ambiguous timing and missing content are left for review.
+
+During generation, chunks show Queued, Generating, Checking, or Repairing. Targeted editors start empty and show each completed prompt immediately. Previous versions stay in Undo/Redo. Cancel stops further work and keeps completed chunks. A failed format check keeps the model output with a small orange attention icon. Hover, focus, or select it for an explanation and a suggested fix. Regenerate, Refine, or edit that prompt directly. Manual edits clear the warning from the previous model output. Runtime and planning errors remain visible until dismissed. Longer prompts, references, and planning context can exceed the model's context limit. See [Sequence troubleshooting](TROUBLESHOOTING.md#sequence-stops-or-repeats-an-action).
+
 ## Music 3
 
 Music 3 is a separate workspace for the MiniMax Music 3 model. It writes structured music captions and does not generate H3 video prompts.
@@ -150,9 +192,11 @@ Every active picture and video is expected to be accounted for with its exact `<
 
 Use **Insert reference** beside **Refine** to add a current subject, picture, video, or audio tag at the caret in the Creative Brief, Generated Prompt, or Refine instruction.
 
-After generation, Writer checks the required format and exact media tags. A valid prompt is returned without being rewritten. If a visual reference tag is missing, Writer can make one correction using the same prepared media. If the correction does not pass the check, Writer keeps the original prompt and shows a warning instead of hiding the problem.
+In Single mode, Writer checks the required format and exact media tags after generation. A valid prompt is returned without being rewritten. If a visual reference tag is missing, Writer can make one correction using the same prepared media. If the correction does not pass the check, Writer keeps the original prompt and shows a warning instead of hiding the problem. Sequence uses its own bounded contract correction and per-chunk attention behavior described above.
 
 ## Refine
+
+This section describes Single mode. For chunk revisions, see [Sequence](#sequence).
 
 Select **Refine** to rewrite the current prompt from a short revision instruction. Refine uses the currently selected provider and model. It keeps the current task context and media manifest, and uses the prompt visible in the editor, including manual edits. A normal Refine request does not attach prepared image or video payloads again. After a successful rewrite, you can restore the previous prompt.
 

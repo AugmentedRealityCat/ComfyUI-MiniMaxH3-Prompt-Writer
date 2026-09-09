@@ -8,6 +8,8 @@ Current Standalone version: **0.1.4**
 
 ## This is the Standalone version
 
+Development builds also include [Sequence mode](../docs/USAGE.md#sequence) for writing several standalone H3 prompts from one brief. This feature is not included in the published 0.1.4 ZIP.
+
 You do not need ComfyUI. Do not install this ZIP into ComfyUI `custom_nodes`.
 
 Looking for the ComfyUI extension? See

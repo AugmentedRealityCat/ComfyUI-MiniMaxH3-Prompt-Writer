@@ -1,4 +1,7 @@
+import { generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
+import { createSequenceWorkspace } from "./sequence_workspace.js";
+import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
 import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getGuides, getModels, getOllamaStatus, getStatus, getSystemPrompt, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, unloadModel, uploadMedia } from "./api/h3studio.js";
 import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isGuideMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
@@ -42,10 +45,7 @@ const vramHandoffCoordinator = createVramHandoffCoordinator();
 const INSTALLATION_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/INSTALLATION.md";
 const TROUBLESHOOTING_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/TROUBLESHOOTING.md";
 const MUSIC3_GUIDE_URL = "https://github.com/MiniMax-AI/MiniMax-Music3/tree/main/skills/music-caption-rewriter";
-const ASPECT_RATIOS = [
-  ["1:1", "Square"], ["2:3", "Portrait"], ["3:2", "Landscape"], ["3:4", "Portrait"],
-  ["4:3", "Landscape"], ["9:16", "Vertical"], ["16:9", "Widescreen"], ["21:9", "Ultrawide"],
-];
+
 const MODES = {
   T2VA: {
     title: "Text to video",
@@ -361,6 +361,7 @@ const STYLE_MODULES = [
   "overlays",
   "music",
   "responsive",
+  "sequence",
 ];
 
 function injectStyles() {
@@ -403,6 +404,7 @@ function icon(name, size = 16) {
 
 function renderAsset(asset, index) {
   const destructiveDisabled = studio.requestBusy ? "disabled" : "";
+  const tagDisabled = studio.requestBusy ? "disabled" : "";
   const draggable = studio.requestBusy ? "false" : "true";
   const visual = asset.type === "audio"
     ? `<div class="h3ps-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`
@@ -415,7 +417,7 @@ function renderAsset(asset, index) {
     <div class="h3ps-asset" tabindex="0" role="group" aria-label="Media inspector" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Replace ${escapeHtml(asset.reference || asset.filename)}">
       <span class="h3ps-asset-preview h3ps-${asset.type}">${visual}${overlay}</span>
       <span class="h3ps-asset-copy">
-        <strong>${asset.reference ? `<button type="button" class="h3ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" title="Insert reference at text cursor">${escapeHtml(asset.reference || asset.filename)}</button>` : "Trim required"}</strong>
+        <strong>${asset.reference ? `<button type="button" class="h3ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" ${tagDisabled} title="Insert reference at text cursor">${escapeHtml(asset.reference || asset.filename)}</button>` : "Trim required"}</strong>
         <small>${escapeHtml(asset.filename)}</small>
       </span>
       ${duration ? `<span class="h3ps-duration">${duration}</span>` : ""}
@@ -488,6 +490,7 @@ function notifyMediaCompatibility() {
 }
 
 function renderMedia(mode) {
+  mode = studio.sequence?.mediaMode(mode) ?? mode;
   studio.floatingMedia?.refresh();
   if (mode === "Music3") {
     studio.root.querySelectorAll("[data-mode]").forEach((button) => button.classList.remove("is-active"));
@@ -538,6 +541,7 @@ function renderMedia(mode) {
   syncComposerControl(mode);
 
   syncModeAvailability();
+  studio.sequence?.refresh();
 }
 
 function setMusicSystemPromptProfile(profile) {
@@ -575,7 +579,8 @@ function rememberReferenceInsertTarget(editor) {
   referenceInsertTarget = { editor, caret: editor.selectionStart ?? editor.value.length };
 }
 
-function insertSelectedReference(reference) {
+function insertSelectedReference(reference, assetId) {
+  if (studio.sequence?.insert(assetId)) return;
   if (studio.mode === "Music3") return;
   const fallback = studio.root.querySelector("[data-output]");
   const target = referenceInsertTarget?.editor?.isConnected ? referenceInsertTarget : { editor: fallback, caret: fallback.selectionStart };
@@ -613,7 +618,7 @@ function bindMediaActions(mode) {
   });
   studio.root.querySelectorAll("[data-media-tag]").forEach(button=>{
     button.addEventListener("pointerdown",e=>e.preventDefault());
-    button.addEventListener("click",e=>{e.stopPropagation();if(!studio.requestBusy)insertSelectedReference(button.dataset.mediaTag);});
+    button.addEventListener("click",e=>{e.stopPropagation();if(!studio.requestBusy)insertSelectedReference(button.dataset.mediaTag,button.closest("[data-asset-id]")?.dataset.assetId);});
   });
   studio.root.querySelectorAll("[data-remove-asset]").forEach((button) => {
     button.addEventListener("click", async (event) => {
@@ -808,14 +813,18 @@ function currentBriefTextarea() {
   return studio.root.querySelector(studio.mode === "Music3" ? "[data-music-brief]" : "[data-video-brief]");
 }
 
+async function copyPromptText(text, music = false) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(music ? "Caption copied" : "Prompt copied", music ? "The generated Music 3 caption is on your clipboard." : "The generated H3 prompt is on your clipboard.");
+  } catch (error) {
+    showToast("Copy failed", "Clipboard access was denied.", error.message);
+  }
+}
+
 function setClearMenuOpen(open) {
   if (!studio) return;
-  const menu = studio.root.querySelector("[data-clear-menu]");
-  const toggle = studio.root.querySelector("[data-clear-menu-toggle]");
-  if (!menu || !toggle) return;
-  menu.hidden = !open;
-  toggle.setAttribute("aria-expanded", String(open));
-  studio.root.querySelector("[data-actions-menu-toggle]")?.setAttribute("aria-expanded", String(open));
+  setSplitMenuOpen(studio.root.querySelector("[data-clear-control]"), open);
 }
 
 function clearCurrentPrompts({ notify = true } = {}) {
@@ -848,7 +857,7 @@ function clearCurrentPrompts({ notify = true } = {}) {
 async function clearCurrentMedia({ notify = true } = {}) {
   if (!studio || studio.requestBusy) return false;
   try {
-    const result = await clearMedia(studio.sessionId, studio.mode);
+    const result = await clearMedia(studio.sessionId, studio.sequence?.mediaMode(studio.mode) ?? studio.mode);
     studio.assets = result.assets;
 
 
@@ -1057,7 +1066,7 @@ function setGenerationState(state, label, detail) {
     ? "Available after the active Writer request finishes"
     : "Unload models held by ComfyUI without clearing cached workflow results";
   button.classList.toggle("is-cancel", busy);
-  if (!busy || !wasBusy) button.innerHTML = busy ? `<span class="h3ps-spinner"></span>Cancel` : `${icon("spark", 16)}<span data-generate-label>${studio.mode === "Music3" ? "Generate caption" : "Generate prompt"}</span>`;
+  if (!busy || !wasBusy) button.innerHTML = generationButtonMarkup(icon, busy, studio.mode === "Music3" ? "Generate caption" : "Generate prompt");
   renderMedia(studio.mode);
   syncLifecycleActions();
   status.hidden = !busy;
@@ -2995,16 +3004,14 @@ function createStudio() {
             <div class="h3ps-section-actions">
 
               <div class="h3ps-clear-control" data-clear-control>
-                <button class="h3ps-clear-primary" type="button" data-actions-menu-toggle aria-expanded="false">Actions</button>
-                <button class="h3ps-clear-toggle" type="button" aria-label="Media actions" aria-expanded="false" data-clear-menu-toggle>${icon("chevron", 12)}</button>
-                <div class="h3ps-clear-menu" data-clear-menu hidden>
+                ${splitMenuMarkup(icon, {label: "Actions", primary: "data-actions-menu-toggle", toggle: "data-clear-menu-toggle", menu: "data-clear-menu", ariaLabel: "Media actions", contents: `
                   ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media data-media-panel-action disabled title="Add media first"><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
                   <button type="button" data-open-composer disabled><strong>Compose</strong><small>Create collage</small></button>
                   <hr data-compose-separator>
                   <button type="button" data-clear-action data-clear-media><strong>Clear media</strong><small>Keep prompts</small></button>
                   <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
                   <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
-                </div>
+                `})}
               </div>
             </div>
           </div>
@@ -3013,7 +3020,7 @@ function createStudio() {
 
           <div class="h3ps-control-grid">
             <label class="h3ps-field h3ps-duration-field"><span>Duration <b data-duration-label>10 seconds</b></span><div><input type="range" min="1" max="20" step="1" value="10" style="--h3ps-range:47.37%" data-duration-slider><i></i></div></label>
-            <label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" aria-expanded="false" data-choice-toggle="aspect"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" role="group" aria-label="Aspect ratio" data-choice-menu="aspect" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" aria-pressed="false" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>
+            ${aspectRatioMarkup(icon)}
           </div>
 
           <label class="h3ps-brief">
@@ -3100,7 +3107,7 @@ function createStudio() {
             <span class="h3ps-output-primary-actions">
               <button class="h3ps-secondary-button" type="button" title="Refine with local LLM" data-refine-toggle>${icon("spark", 15)} Refine</button>
             </span>
-            <button class="h3ps-secondary-button" type="button" data-copy>${icon("copy", 15)} <span data-copy-label>Copy prompt</span></button>
+            ${copyButtonMarkup(icon, "data-copy", '<span data-copy-label>Copy prompt</span>')}
           </div>
         </section>
       </div>
@@ -3182,11 +3189,9 @@ function createStudio() {
   durationSlider.value = String(studio.durationSeconds);
   durationSlider.style.setProperty("--h3ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
   root.querySelector("[data-duration-label]").textContent = `${studio.durationSeconds} seconds`;
-  const restoredAspect = ASPECT_RATIOS.find(([value]) => value === studio.aspectRatio) || ASPECT_RATIOS.find(([value]) => value === "16:9");
-  root.querySelector("[data-aspect-label]").textContent = restoredAspect[0];
-  root.querySelector("[data-aspect-description]").textContent = restoredAspect[1];
-  root.querySelectorAll("[data-aspect]").forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.aspect === restoredAspect[0]));
+  bindAspectRatio(root.querySelector('[data-choice-toggle="aspect"]').closest(".h3ps-choice"), studio.aspectRatio, value => {
+    studio.aspectRatio = value;
+    saveUserPreferences(localStorage, studio);
   });
   syncTheme();
   syncInterfaceSize();
@@ -3288,12 +3293,7 @@ function createStudio() {
       showToast(error.code || "Guide unavailable", error.message, error.details);
     }
   });
-  root.querySelectorAll("[data-choice-toggle]").forEach((button) => button.addEventListener("click", () => {
-    const menu = root.querySelector(`[data-choice-menu="${button.dataset.choiceToggle}"]`);
-    root.querySelectorAll("[data-choice-menu]").forEach((item) => { if (item !== menu) item.hidden = true; });
-    menu.hidden = !menu.hidden;
-    button.setAttribute("aria-expanded", String(!menu.hidden));
-  }));
+
   root.querySelector("[data-duration-slider]").addEventListener("input", (event) => {
     studio.durationSeconds = Number(event.target.value);
     root.querySelector("[data-duration-label]").textContent = `${studio.durationSeconds} seconds`;
@@ -3393,16 +3393,7 @@ function createStudio() {
     studio.musicLyricsUseBrief = event.target.checked;
     saveUserPreferences(localStorage, studio);
   });
-  root.querySelectorAll("[data-aspect]").forEach((button) => button.addEventListener("click", () => {
-    studio.aspectRatio = button.dataset.aspect;
-    const option = ASPECT_RATIOS.find(([value]) => value === studio.aspectRatio);
-    root.querySelector("[data-aspect-label]").textContent = option[0];
-    root.querySelector("[data-aspect-description]").textContent = option[1];
-    root.querySelector('[data-choice-menu="aspect"]').hidden = true;
-    root.querySelector('[data-choice-toggle="aspect"]').setAttribute("aria-expanded", "false");
-    root.querySelectorAll("[data-aspect]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
-    saveUserPreferences(localStorage, studio);
-  }));
+
   root.querySelectorAll("[data-provider-option]").forEach((button) => button.addEventListener("click", () => {
     selectSettingsProvider(button.dataset.providerOption);
   }));
@@ -3580,14 +3571,7 @@ function createStudio() {
     saveCurrentModeDraft();
     showToast("Edits undone", "Restored the latest AI-generated prompt.");
   });
-  root.querySelector("[data-copy]").addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(root.querySelector("[data-output]").value);
-      showToast(studio.mode === "Music3" ? "Caption copied" : "Prompt copied", studio.mode === "Music3" ? "The generated Music 3 caption is on your clipboard." : "The generated H3 prompt is on your clipboard.");
-    } catch (error) {
-      showToast("Copy failed", "Clipboard access was denied.", error.message);
-    }
-  });
+  root.querySelector("[data-copy]").addEventListener("click", () => copyPromptText(root.querySelector("[data-output]").value, studio.mode === "Music3"));
   root.querySelector("[data-output]").addEventListener("input", () => {
     syncModifiedState();
     renderPromptHighlights();
@@ -3628,6 +3612,29 @@ function createStudio() {
     if (event.target.closest("[data-prompt-reference]")) peek.hidden = true;
   });
   root.querySelector("[data-prompt-highlights]").addEventListener("click", () => editor.focus());
+  studio.sequence = createSequenceWorkspace({
+    root, icon, storage: localStorage, assets: () => studio.assets,
+    isBusy: () => studio.requestBusy,
+    snapshot: () => {
+      if (!studio.selectedModel?.runtime_ready) throw new Error("Select a ready prompt model in Settings.");
+      studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
+      return buildGeneratePayload(studio, { creativeBrief: "", seed: newGenerationSeed() });
+    },
+    prepare: prepareWriterRequest,
+    run: (payload, onEvent) => vramHandoffCoordinator.trackWriterRequest(generateSequence(payload, onEvent)),
+    cancel: (operationId) => cancelSequence(operationId, studio.sessionId),
+    busy: (busy) => {
+      if (busy) markActiveWriterRequest(); else clearActiveWriterRequest();
+      setGenerationState(busy ? "busy" : "idle", "Generating sequence", "Completed prompts are kept as each chunk finishes");
+      root.querySelector(".h3ps-generation-options").inert = busy;
+      root.querySelector("[data-settings-view]").inert = busy;
+    },
+    refresh: () => { syncWorkspace(); renderMedia(studio.mode); },
+    clearMedia: () => clearCurrentMedia(),
+    error: (error) => showToast("Sequence", error.message, error.details || null, null, sequenceNotificationOptions(error)),
+    copy: (text) => copyPromptText(text),
+    insert: (editor, reference) => insertReferenceAtCaret(editor, reference, editor.selectionStart),
+  });
   syncWorkspace();
   restoreModeDraft(studio.mode);
   renderMedia(studio.mode);
@@ -3693,6 +3700,7 @@ function closeStudio() {
   if (!HOST_CAPABILITIES.windowed) return false;
   mediaPanelRequest++;
   if (!studio) return;
+  studio.sequence?.leave();
   const modal = studio.root.querySelector(".h3ps-modal");
   studio.mediaComposer?.close();
   if (studio.mediaEditor?.close() === false) return false;

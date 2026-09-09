@@ -53,13 +53,13 @@ def _messages(
     video_frame_count = 0
     video_sheet_count = 0
     for item in media_inputs:
-        asset = STORE.get(session_id, item["asset_id"])
+        asset = item.get("snapshot_asset") or STORE.get(session_id, item["asset_id"])
         if item["type"] == "image":
             binding = f"{item['reference']}: image reference."
             content.append({"type": "text", "text": binding})
             content.append({
                 "type": "image_url",
-                "image_url": {"url": _asset_data_uri(session_id, item["asset_id"], "image")},
+                "image_url": {"url": item.get("snapshot_uri") or _asset_data_uri(session_id, item["asset_id"], "image")},
             })
             debug_user_parts.extend([
                 {"type": "text", "text": binding},
@@ -78,7 +78,7 @@ def _messages(
             content.append({"type": "text", "text": binding})
             content.append({
                 "type": "image_url",
-                "image_url": {"url": _asset_data_uri(session_id, item["asset_id"], "contact_sheet")},
+                "image_url": {"url": item.get("snapshot_uri") or _asset_data_uri(session_id, item["asset_id"], "contact_sheet")},
             })
             debug_user_parts.extend([
                 {"type": "text", "text": binding},
@@ -94,6 +94,9 @@ def _messages(
         model_info,
     )
     visual_tokens = int(runtime_plan.get("estimated_visual_tokens", fallback_visual_tokens))
+    if assembled.get("completion_policy") == "single_call":
+        # A stable batch plan must not undercount a later chunk's actual media.
+        visual_tokens = max(visual_tokens, fallback_visual_tokens)
     estimated_input_tokens = (
         text_tokens
         + visual_tokens
@@ -264,7 +267,15 @@ def run_h3_pipeline(
             thinking=thinking,
             qwen_reasoning_contract=qwen_reasoning_contract,
         )
-    thinking_fallback = thinking and (
+    single_call = assembled.get("completion_policy") == "single_call"
+    if single_call and primary_finish_reason not in {"stop", "eos", "end_turn"}:
+        if assembled.get("sequence_stage") == "plan":
+            raise ModelError("INVALID_SEQUENCE_PLAN", "The model stopped before completing its plan. No new chunks were written. Run Generate Sequence again.",
+                             {"stage": "planning", "reason": "incomplete_response", "finish_reason": primary_finish_reason})
+        raise ModelError("GENERATION_INCOMPLETE", "The model did not complete the chunk. Increase the generation budget if it reached its limit.")
+    if is_cancelled():
+        raise ModelError("GENERATION_CANCELLED", "Generation was cancelled.")
+    thinking_fallback = not single_call and thinking and (
         not text.strip() or primary_finish_reason == "length"
     )
     if thinking_fallback:
@@ -308,6 +319,13 @@ def run_h3_pipeline(
 
     prompt = text
     reasoning_tokens = count_text_tokens(reasoning_content) if reasoning_content else 0
+    if single_call:
+        seconds = time.perf_counter() - generation_started
+        return {"prompt": text, "input_tokens": int(usage.get("prompt_tokens", 0)),
+                "output_tokens": int(usage.get("completion_tokens", 0)), "generation_seconds": round(seconds, 3),
+                "media_processing_seconds": round(media_processing_seconds, 3), **media_metrics,
+                "thinking_fallback": False, "format_repair_attempted": False,
+                "primary_finish_reason": primary_finish_reason, "seed": seed}
     initial_audit, reference_policy_value, intent_text, duration_seconds, camera_structure_allowed = _audit(
         prompt,
         assembled,

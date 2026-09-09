@@ -43,6 +43,7 @@ Writer sends your brief, selected mode, prepared references, and the official Mi
 
 ## Key features
 
+- Sequence workspace: plan a longer brief across editable chunks, each a standalone official H3 prompt. See [Sequence usage](docs/USAGE.md#sequence). Available in this development branch; not included in the release ZIPs linked above.
 - T2VA, I2VA, FL2VA, L2VA, and Reference modes.
 - Up to 9 images, 3 videos, and 3 audio references in Reference mode.
 - Clear `<Picture N>`, `<Video N>`, and `<Audio N>` labels for assigning identity, wardrobe, setting, motion, camera, sound, or other roles.

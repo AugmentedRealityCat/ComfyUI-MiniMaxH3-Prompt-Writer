@@ -27,6 +27,9 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install aiohttp av pillow numpy
 
+      - name: Install DOM test dependency
+        run: npm ci --ignore-scripts
+
       # unittest includes the local Node frontend wrapper; do not run it twice.
       - name: Run Python and frontend tests
         env:

@@ -1,4 +1,7 @@
+import { generationButtonMarkup } from "../web/writer_controls.js";
+import { aspectRatioMarkup, splitMenuMarkup } from "../web/writer_controls.js";
 import './media_visual.mjs';
+import './sequence.mjs';
 import "./writer_async.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -913,7 +916,7 @@ test("media card overlays stay inside the thumbnail and below previews", () => {
 
 test("Actions keeps media tools ordered and explains unavailable states without hiding Compose", async () => {
   const { mediaVisualDescriptor } = await import("../web/media_visual.js");
-  const markup = mainSource.slice(mainSource.indexOf('<div class="h3ps-clear-menu"'), mainSource.indexOf('<p class="h3ps-section-hint"'));
+  const markup = mainSource.slice(mainSource.indexOf('${splitMenuMarkup(icon, {label: "Actions"'), mainSource.indexOf('<p class="h3ps-section-hint"'));
   assert.match(markup, /data-media-panel-action[\s\S]*data-open-composer[\s\S]*<hr data-compose-separator>[\s\S]*data-clear-media[\s\S]*data-clear-prompts[\s\S]*data-clear-all/);
   assert.doesNotMatch(markup, /data-open-composer[^>]*hidden|data-compose-separator[^>]*hidden/);
   assert.match(stylesSource, /\.h3ps-clear-menu button:disabled \{ opacity: .45; cursor: default;/);
@@ -1617,8 +1620,8 @@ test("workbench exposes responsive stacking and layered keyboard navigation", ()
   assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(mainSource, /aria-expanded="false" data-guide-toggle/);
   assert.doesNotMatch(mainSource, /role="(?:menu|menuitem|listbox|option)"|aria-haspopup="menu"/);
-  assert.match(mainSource, /class="h3ps-choice-menu h3ps-aspect-menu"[^>]*role="group"/);
-  assert.match(mainSource, /aria-pressed="false"\s+data-aspect="\$\{value\}"/);
+  assert.match(aspectRatioMarkup(()=>""), /class="h3ps-choice-menu h3ps-aspect-menu"[^>]*role="group"/);
+  assert.match(aspectRatioMarkup(()=>""), /aria-pressed="false"\s+data-aspect="16:9"/);
   assert.match(mainSource, /role="status" aria-live="polite" aria-atomic="true" data-status/);
   assert.match(mainSource, /if \(event\.key === "Tab"\)[\s\S]{0,1000}focusable/);
 });
@@ -1663,7 +1666,8 @@ test("prompt refinement keeps actions above a vertically resizable editor", () =
 });
 
 test("refined media UI has neutral actions, no dead preview flow or reorder thumbnail ghost",()=>{
-  assert.match(mainSource,/data-actions-menu-toggle[^>]*>Actions/);
+  assert.match(splitMenuMarkup(()=>"",{label:"Actions",primary:"data-actions-menu-toggle",toggle:"data-clear-menu-toggle",menu:"data-clear-menu",contents:"",ariaLabel:"Media actions"}),/data-actions-menu-toggle[^>]*>Actions/);
+  assert.match(mainSource,/splitMenuMarkup\(icon, \{label: "Actions"/);
   assert.doesNotMatch(mainSource,/h3ps-compose-button|openVideoPreview|openImagePreview|resampleCurrentVideo|h3ps-drag-ghost/);
   assert.match(mainSource,/ghost.width = ghost.height = 1/);
   assert.match(mainSource,/setDragImage\(ghost, 0, 0\)/);
@@ -1692,7 +1696,7 @@ test("startup generation state has no legacy preview dependency",()=>{
   const start=mainSource.indexOf('function setGenerationState('),end=mainSource.indexOf('function updatePromptResidency(',start);
   const noop=()=>{},node={querySelector:()=>node,querySelectorAll:()=>[],classList:{toggle:noop},innerHTML:''};
   const studio={root:node,mode:'Reference'};
-  new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions','HOST_CAPABILITIES',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop,{comfyMemory:true});
+  new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions','HOST_CAPABILITIES','generationButtonMarkup',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop,{comfyMemory:true},generationButtonMarkup);
 });
 
 test("only confirmed Writer ownership makes unknown router state a release target",async()=>{

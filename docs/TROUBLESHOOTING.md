@@ -275,11 +275,31 @@ Ollama context is automatic in Writer; Ollama decides whether to offload parts o
 
 The next request completes without a context-limit or allocation error. If Thinking falls back, Writer reports it instead of presenting it as a full Thinking result.
 
+## Sequence stops or repeats an action
+
+**Symptom**
+
+Sequence stops partway through generation, marks a prompt with an orange attention icon, or produces an action with poor continuity or pacing.
+
+**Cause**
+
+The model may return an incomplete plan, unsupported prompt structure, or ambiguous local timestamp. A valid plan can still distribute action poorly. The plan, preceding prompt, official guide, and references also consume context.
+
+**Fix**
+
+Review the brief and Chunk Direction. Make required event order or endpoint explicit, then regenerate the affected chunks. Open-ended activity does not need an invented endpoint. An incomplete or ambiguous plan stops generation without fallback. The message identifies missing steps, a missing ending, or unreadable JSON. Run Generate Sequence again. Technical details show the exact planner failure. A redundant interval number is ignored only when it matches the requested interval. A repairable H3 format problem gets one automatic correction. If it still needs attention, the model output stays visible and later chunks are not started. Select the orange icon for the model error and a suggested fix. Use Refine, Regenerate, or edit the text yourself. A manual edit clears that old warning. Completed chunks survive cancellation or a later failure; previous versions remain in Undo/Redo. If one model repeatedly fails, try another supported model.
+
+For context errors, increase the supported Context or reduce Generation budget or reference load. Writer does not silently truncate continuity evidence. Do not increase context for a VRAM allocation failure; follow the memory guidance above.
+
+**Verify**
+
+Each chunk starts from the preceding accepted state, keeps timestamps local, and completes only its intended action. Check reference tags and natural pacing yourself. See [Sequence usage](USAGE.md#sequence) for media scope and editing behavior.
+
 ## Reference prompt warning
 
 **Symptom**
 
-Writer says it repaired a missing reference tag or kept the original prompt with a format warning.
+Single mode says it repaired a missing reference tag or kept the original prompt with a format warning. Sequence has its own single contract correction and chunk-local attention indicator; see the section above.
 
 **Cause**
 

@@ -93,3 +93,5 @@
   background: rgba(232, 97, 60, .08);
   color: var(--h3ps-stop-action) !important;
 }
+
+.h3ps-toast.is-visible{pointer-events:auto;user-select:text;cursor:auto}
