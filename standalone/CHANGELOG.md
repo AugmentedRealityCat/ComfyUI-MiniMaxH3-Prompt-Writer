@@ -1,5 +1,10 @@
 # Standalone changelog
 
+## 0.1.6 - 2026-09-10
+
+- Fixed a Local GGUF crash when processing large images with vision models.
+- Added server log details when a Local GGUF connection is interrupted.
+
 ## 0.1.5 - 2026-09-09
 
 - Added **Sequence mode**: write a series of timed clips from one brief, keep action and references consistent, and edit each prompt separately.

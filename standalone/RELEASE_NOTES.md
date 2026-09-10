@@ -1,21 +1,18 @@
-# H3 Prompt Writer Standalone v0.1.5
+# H3 Prompt Writer Standalone v0.1.6
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip** from the release assets below.
+Download **H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- **Sequence mode:** turn one brief into a series of timed clips with consistent action and references. Each clip gets its own complete prompt and can be edited separately.
-- **Compact mode** for Sequence.
-- Improved draft saving, model switching, generation reliability and video playback. Text-only Music 3 is now supported.
-
-Planning helps continuity but does not guarantee natural pacing or exact reference likeness. Some models still omit required H3 fields or stretch short actions. Review prompts before generating video.
+- Fixed a Local GGUF crash when processing large images with vision models.
+- Added server log details when a Local GGUF connection is interrupted.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

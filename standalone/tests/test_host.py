@@ -527,6 +527,9 @@ class ManagedGGUFTest(unittest.TestCase):
             )
             self.assertTrue(started["running"])
             self.assertTrue(started["endpoint"].startswith("http://127.0.0.1:"))
+            command = server._process.args
+            self.assertEqual(command[command.index("--batch-size") + 1], "2048")
+            self.assertEqual(command[command.index("--ubatch-size") + 1], "2048")
             reused = server.start(
                 binary=fixture,
                 model=model,
@@ -535,6 +538,13 @@ class ManagedGGUFTest(unittest.TestCase):
                 kv_cache="q8",
             )
             self.assertTrue(reused["reused"])
+            text_only = server.start(
+                binary=fixture, model=model, projector=None, context_tokens=8192, kv_cache="q8",
+            )
+            self.assertTrue(text_only["running"])
+            self.assertFalse(text_only["reused"])
+            self.assertNotIn("--batch-size", server._process.args)
+            self.assertNotIn("--ubatch-size", server._process.args)
             self.assertTrue(server.stop()["stopped"])
             self.assertFalse(server.status()["running"])
             # Windows can release an inherited redirected-file handle a moment

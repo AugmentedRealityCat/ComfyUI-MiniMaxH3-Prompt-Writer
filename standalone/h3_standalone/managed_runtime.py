@@ -168,6 +168,8 @@ class ManagedLlamaServer:
             ]
             if projector is not None:
                 command.extend(["--mmproj", str(projector)])
+                # Non-causal vision blocks must fit in one physical decode batch.
+                command.extend(["--batch-size", "2048", "--ubatch-size", "2048"])
             if kv_cache in {"q8", "f16"}:
                 cache_type = "q8_0" if kv_cache == "q8" else "f16"
                 command.extend(["--cache-type-k", cache_type, "--cache-type-v", cache_type])

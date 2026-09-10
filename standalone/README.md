@@ -2,9 +2,9 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.5**
+Current Standalone version: **0.1.6**
 
-[Download H3 Prompt Writer Standalone v0.1.5](../../../releases/download/standalone-v0.1.5/H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip)
+[Download H3 Prompt Writer Standalone v0.1.6](../../../releases/download/standalone-v0.1.6/H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip)
 
 ## This is the Standalone version
 
@@ -69,12 +69,10 @@ H3_PROJECTOR="/path/to/mmproj.gguf" \
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.5
+## What's new in v0.1.6
 
-- **Sequence:** write several independent H3 prompts with shared media and per-chunk directions.
-- **Planning and continuity:** Writer allocates the requested development, then writes each chunk with its own local timing and reference labels.
-- **Draft protection:** completed chunks stay visible after cancellation or a later failure. Earlier versions remain in Undo/Redo.
-- **Copy All:** use plain prompts or customize the template and separator in Reader.
+- Fixed a Local GGUF crash when processing large images with vision models.
+- Added server log details when a Local GGUF connection is interrupted.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -128,6 +126,10 @@ one managed server on `127.0.0.1`, reuses it while the configuration is unchange
 and keeps native runtime failures outside the Writer process. `llama-cpp-python` is
 not used for Local GGUF.
 
+If a Local GGUF connection is interrupted, Technical details includes the server log
+path and an exit code when available. Try generating again; a stopped server is
+started automatically. You do not normally need to restart Windows.
+
 ## Notes
 
 - The local Writer host binds only to `127.0.0.1`.
@@ -173,6 +175,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.5.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

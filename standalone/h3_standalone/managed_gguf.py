@@ -715,6 +715,23 @@ class ManagedGGUFBackend:
             result = self.external.generate(remote, assembled, session_id, **delegated)
             result.update({"managed_llama_server": True, "external_server": False})
             return result
+        except self.model_error as error:
+            if error.code not in {"EXTERNAL_SERVER_UNAVAILABLE", "EXTERNAL_STREAM_INTERRUPTED"}:
+                raise
+            # Capture diagnostics before unload clears the process handle. The
+            # socket may close before the process exit code becomes available.
+            runtime = self.controller.runtime.status()
+            raise self.model_error(
+                "MANAGED_SERVER_INTERRUPTED",
+                "The connection to Local GGUF was interrupted. Try again. "
+                "If it happens again, check the server log listed in Technical details.",
+                {
+                    **(error.details if isinstance(error.details, dict) else {}),
+                    "transport_code": error.code,
+                    "log_path": runtime["log_path"],
+                    "exit_code": runtime["exit_code"],
+                },
+            ) from error
         finally:
             if unload_after or self._unload_requested:
                 self.unload()
