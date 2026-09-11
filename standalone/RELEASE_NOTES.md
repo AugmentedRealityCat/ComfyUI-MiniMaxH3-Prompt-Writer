@@ -1,18 +1,18 @@
-# H3 Prompt Writer Standalone v0.1.6
+# H3 Prompt Writer Standalone v0.1.7
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip** from the release assets below.
+Download **H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- Fixed a Local GGUF crash when processing large images with vision models.
-- Added server log details when a Local GGUF connection is interrupted.
+- Fixed video trimming and cropping failing because NumPy was missing.
+- Existing Windows environments now install missing dependencies on launch.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

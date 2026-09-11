@@ -25,7 +25,7 @@ jobs:
           node-version: "22"
 
       - name: Install test dependencies
-        run: python -m pip install aiohttp av pillow numpy
+        run: python -m pip install -r standalone/requirements.txt
 
       - name: Install DOM test dependency
         run: npm ci --ignore-scripts

@@ -13,7 +13,6 @@ if not exist ".venv\Scripts\python.exe" (
   where uv >nul 2>nul
   if not errorlevel 1 (
     uv venv ".venv" || goto :setup_failed
-    uv pip install --python ".venv\Scripts\python.exe" -r requirements.txt || goto :setup_failed
   ) else (
     where py >nul 2>nul
     if not errorlevel 1 (
@@ -22,6 +21,17 @@ if not exist ".venv\Scripts\python.exe" (
       where python >nul 2>nul || goto :python_missing
       python -m venv ".venv" || goto :python_missing
     )
+  )
+)
+
+rem Check existing environments too, including upgrades and interrupted setup.
+".venv\Scripts\python.exe" -c "import aiohttp, av, PIL, numpy" >nul 2>nul
+if errorlevel 1 (
+  echo Installing required dependencies...
+  where uv >nul 2>nul
+  if not errorlevel 1 (
+    uv pip install --python ".venv\Scripts\python.exe" -r requirements.txt || goto :setup_failed
+  ) else (
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :setup_failed
   )
 )

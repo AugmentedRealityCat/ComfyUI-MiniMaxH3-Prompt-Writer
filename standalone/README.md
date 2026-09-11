@@ -2,9 +2,9 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.6**
+Current Standalone version: **0.1.7**
 
-[Download H3 Prompt Writer Standalone v0.1.6](../../../releases/download/standalone-v0.1.6/H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip)
+[Download H3 Prompt Writer Standalone v0.1.7](../../../releases/download/standalone-v0.1.7/H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip)
 
 ## This is the Standalone version
 
@@ -69,10 +69,10 @@ H3_PROJECTOR="/path/to/mmproj.gguf" \
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.6
+## What's new in v0.1.7
 
-- Fixed a Local GGUF crash when processing large images with vision models.
-- Added server log details when a Local GGUF connection is interrupted.
+- Fixed video trimming and cropping failing because NumPy was missing.
+- Existing Windows environments now install missing dependencies on launch.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -175,6 +175,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.6.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

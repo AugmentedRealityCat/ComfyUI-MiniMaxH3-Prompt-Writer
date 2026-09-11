@@ -1,5 +1,10 @@
 # Standalone changelog
 
+## 0.1.7 - 2026-09-11
+
+- Fixed video trimming and cropping failing because NumPy was missing.
+- Existing Windows environments now install missing dependencies on launch.
+
 ## 0.1.6 - 2026-09-10
 
 - Fixed a Local GGUF crash when processing large images with vision models.
