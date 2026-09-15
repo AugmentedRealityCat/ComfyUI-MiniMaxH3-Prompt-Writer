@@ -141,3 +141,21 @@ If an update replaces `python_embeded` or leaves mixed native packages, reinstal
 Restart ComfyUI and confirm that Direct reports **Runtime detected**, then complete one real Direct generation. Do not copy native DLLs manually, replace ComfyUI's Python files, or install the package into an unrelated system Python.
 
 If ComfyUI exits during the first Direct load or Windows reports `0xC000001D`, see [Illegal instruction](TROUBLESHOOTING.md#windows-0xc000001d-illegal-instruction). Reinstalling the same wheel repeatedly will not solve a CPU instruction incompatibility.
+
+### Additional model folders
+
+ComfyUI extension users can add folders in `extra_model_paths.yaml` using either
+`LLM` or `llm`. Restart ComfyUI after editing the file, then select **Refresh**.
+For example:
+
+```yaml
+writer_models:
+  LLM: |
+    M:/Models/LLM
+    D:/Shared/VideoModels
+```
+
+**Scan details** lists every searched folder. **Copy model path** copies the first
+search folder. Subfolders are scanned too. If several compatible projectors share
+one folder, move each model and its intended projector into its own subfolder.
+Writer will not guess which projector to use.

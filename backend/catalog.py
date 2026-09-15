@@ -140,7 +140,7 @@ def _pair_projector(
     if len(compatible) == 1:
         return compatible[0], "compatible", None
     if len(compatible) > 1:
-        return None, "ambiguous", "Multiple compatible vision projectors share this folder. Keep only the intended projector beside the model."
+        return None, "ambiguous", "Multiple compatible vision projectors share this folder. Move each model and its intended projector into its own subfolder."
     return None, "incompatible", "The vision projector files in this folder are not metadata-compatible with this model."
 
 
@@ -295,12 +295,24 @@ def _model_candidate(
     }, pairing_issue
 
 
+def _model_roots() -> list[Path]:
+    roots = []
+    seen = set()
+    for category in ("LLM", "llm"):
+        for value in folder_paths.get_folder_paths(category):
+            root = Path(value).resolve()
+            if root not in seen:
+                seen.add(root)
+                roots.append(root)
+    return roots
+
+
 def discover_models_with_diagnostics() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
     scanned_roots: list[dict[str, Any]] = []
 
-    for root_name in folder_paths.get_folder_paths("LLM"):
+    for root_name in _model_roots():
         root = Path(root_name)
         root_diagnostics: dict[str, Any] = {
             "path": str(root),
@@ -400,7 +412,7 @@ def find_model(model_id: str) -> dict[str, Any] | None:
         return None
 
     roots = []
-    for root_name in folder_paths.get_folder_paths("LLM"):
+    for root_name in _model_roots():
         try:
             roots.append(Path(root_name).resolve(strict=True))
         except (OSError, RuntimeError):

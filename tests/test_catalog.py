@@ -104,6 +104,27 @@ class ModelDiscoveryTests(unittest.TestCase):
         ):
             return catalog.find_model(str(model_path.resolve()))
 
+    def test_lowercase_roots_support_discovery_and_lookup_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "gemma-4-test-Q4.gguf"
+            write_model(model)
+            write_projector(root / "mmproj-BF16.gguf")
+            for upper in ([], [str(root)]):
+                with (
+                    self.subTest(upper=upper),
+                    patch.object(catalog.folder_paths, "get_folder_paths",
+                                 side_effect=lambda name: upper if name == "LLM" else [str(root)]),
+                    patch.object(catalog.importlib.util, "find_spec", return_value=object()),
+                    patch.object(catalog, "_runtime_version", return_value="0.3.35"),
+                ):
+                    models, diagnostics = catalog.discover_models_with_diagnostics()
+                    self.assertEqual(len(models), 1)
+                    self.assertEqual(len(diagnostics["roots"]), 1)
+                    self.assertEqual(diagnostics["roots"][0]["path"], str(root.resolve()))
+                    self.assertIsNotNone(catalog.find_model(str(model)))
+                    self.assertIsNone(catalog.find_model(str(root.parent / "outside.gguf")))
+
     def test_single_flat_pair_is_paired_automatically(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -177,7 +198,7 @@ class ModelDiscoveryTests(unittest.TestCase):
         self.assertIsNone(model["projector"])
         self.assertTrue(model["runtime_ready"])
         self.assertEqual(model["vision_status"], "ambiguous")
-        self.assertIn("Keep only the intended projector", model["capability_message"])
+        self.assertIn("Move each model and its intended projector into its own subfolder", model["capability_message"])
 
     def test_separate_subfolders_pair_locally(self):
         with tempfile.TemporaryDirectory() as directory:

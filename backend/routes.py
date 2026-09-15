@@ -536,7 +536,7 @@ async def get_models(_request: web.Request) -> web.Response:
     models, discovery = discover_models_with_diagnostics()
     return web.json_response({
         "models": models,
-        "model_directory": "ComfyUI/models/LLM/",
+        "model_directory": discovery["roots"][0]["path"] if discovery["roots"] else "ComfyUI/models/LLM/",
         "setup": model_setup_catalog(),
         "discovery": discovery,
     })
