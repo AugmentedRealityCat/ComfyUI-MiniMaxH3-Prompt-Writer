@@ -13,6 +13,7 @@ function deferred() {
 
 // Execute the actual orchestration functions, replacing only their IO boundaries.
 function controller(names, dependencies) {
+  if (dependencies.studio) dependencies.studio.desktopNotifications = { notify() {} };
   const context = vm.createContext(dependencies);
   for (const name of names) {
     const declaration = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, "m"));

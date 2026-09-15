@@ -51,7 +51,7 @@ export function createSequenceWorkspace(host) {
   const persist = () => { try { saveSequence(host.storage,state); } catch(e) { host.error(e); } };
   const changed = () => { persist(); render(); };
   const controller = createSequenceController({state, snapshot:host.snapshot, prepare:host.prepare, run:host.run, cancel:host.cancel,
-    changed, progressChanged:render, error:host.error, busyChanged(busy) { if(busy) selection=null; host.busy(busy); left.inert=busy; render(); } });
+    changed, progressChanged:render, error:host.error, settled:host.settled, busyChanged(busy) { if(busy) selection=null; host.busy(busy); left.inert=busy; render(); } });
   function fit(editor) {
     if (!editor || editor.closest("[hidden]")) return;
     const scroll = right.scrollTop;

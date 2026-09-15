@@ -275,3 +275,11 @@ Music 3 has a collapsed **System prompt** control in its workspace. It contains 
 **Auto VRAM** is an optional ComfyUI-only control for Direct GGUF, local Ollama, and External llama.cpp. Before Writer starts, it asks an idle ComfyUI to unload workflow models and waits for the release to be confirmed. Before ComfyUI Queue continues, it stops and unloads a Writer-managed Direct or local Ollama model and confirms that it is no longer resident. Verified External routers also unload the exact selected model before Queue and confirm its state; single-model External servers receive only the before-generation step. Writer generation does not start if ComfyUI is busy or its release cannot be confirmed. Ordinary ComfyUI Queue is best-effort: cleanup failure or timeout shows a warning but does not block Queue. The control is off by default and is not shown in Standalone.
 
 Provider setup details are in [Choose a provider](PROVIDERS.md). Error-specific steps are in [Troubleshooting](TROUBLESHOOTING.md).
+
+### Desktop notifications
+
+Enable **Desktop notifications** below System Prompt in Settings and allow browser
+notifications. Writer notifies you when a request finishes or fails while its tab
+is hidden. Sequence sends one notification per run. Cancelled requests stay quiet.
+This works in ComfyUI and Standalone where the browser supports notifications.
+Keep the page open; browser and system notification settings still apply.

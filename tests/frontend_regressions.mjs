@@ -1,3 +1,4 @@
+import "./desktop_notifications.mjs";
 import { generationButtonMarkup } from "../web/writer_controls.js";
 import { aspectRatioMarkup, splitMenuMarkup } from "../web/writer_controls.js";
 import './media_visual.mjs';

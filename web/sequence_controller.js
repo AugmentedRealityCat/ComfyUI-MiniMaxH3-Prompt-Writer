@@ -1,7 +1,7 @@
 import { replacePrompt, sequenceInputs } from "./sequence_state.js";
 
 // Only complete, owned responses replace the working text. Progress is ephemeral.
-export function createSequenceController({ state, snapshot, prepare, run, cancel, changed = () => {}, busyChanged = () => {}, progressChanged = () => {}, error = () => {} }) {
+export function createSequenceController({ state, snapshot, prepare, run, cancel, changed = () => {}, busyChanged = () => {}, progressChanged = () => {}, error = () => {}, settled = () => {} }) {
   let active = null, session = 0;
   const progress = new Map();
   let phase = "";
@@ -59,6 +59,7 @@ export function createSequenceController({ state, snapshot, prepare, run, cancel
           }
         });
         if (current(op) && pending.size && !stoppedForAttention) throw new Error("Sequence connection ended before all requested chunks completed. Finished prompts were kept.");
+        if (current(op)) settled(stoppedForAttention ? "attention" : "complete");
       } catch (failure) {
         if (!active || current(op)) {
           const id = [...progress].find(([, status]) => ["generating", "checking", "repairing", "failed"].includes(status))?.[0];
@@ -67,6 +68,7 @@ export function createSequenceController({ state, snapshot, prepare, run, cancel
             progress.set(id, "failed");
           }
           error(failure);
+          if (op.sent && failure.code !== "GENERATION_CANCELLED") settled("failed");
           if (active === op && op.sent) await sendCancel(op);
         }
       } finally {

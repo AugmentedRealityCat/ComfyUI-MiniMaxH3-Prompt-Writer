@@ -1,3 +1,4 @@
+import { createDesktopNotifications } from "./desktop_notifications.js";
 import { promptHighlightMarkup } from "./prompt_highlights.js";
 import { generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
@@ -1405,8 +1406,10 @@ async function startGenerationPreview() {
       ];
       showToast(studio.mode === "Music3" ? "Caption generated" : "Prompt generated", details.filter(Boolean).join(" · "));
     }
+    studio.desktopNotifications.notify("Generation finished. Your prompt is ready.");
     if (result.lifecycle_warning) showToast("Model cleanup", result.lifecycle_warning, null, null, {dismissOnWorkspaceClick:true});
   } catch (error) {
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Generation failed. Open Writer for details.");
     if (error.code === "GENERATION_CANCELLED") {
       showToast("Generation cancelled", "The active request stopped.");
     } else if (error.code === "INSUFFICIENT_FREE_VRAM") {
@@ -2737,11 +2740,13 @@ async function submitLyricsRefinement() {
     restore.hidden = false;
     updateMusicLyricsCount();
     saveCurrentModeDraft();
+    studio.desktopNotifications.notify("Lyrics request finished.");
     showToast(
       currentLyrics.trim() ? "Lyrics rewritten" : "Lyrics created",
       `${result.total_seconds.toFixed(1)}s · ${result.tokens_per_second.toFixed(1)} tok/s`,
     );
   } catch (error) {
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Lyrics request failed. Open Writer for details.");
     if (error.code === "GENERATION_CANCELLED") showToast("Lyrics request cancelled", "The previous Lyrics were kept.");
     else if (error.code === "INSUFFICIENT_FREE_VRAM") showVramRetry(error, submitLyricsRefinement);
     else showToast(error.code || "Lyrics request failed", error.message, error.details);
@@ -2815,6 +2820,7 @@ async function submitRefinement() {
     studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
     syncModifiedState();
     saveCurrentModeDraft();
+    studio.desktopNotifications.notify("Refinement finished. Your prompt is ready.");
     showToast(
       result.thinking_fallback ? "Rewrite completed" : "Prompt rewritten",
       result.thinking_fallback
@@ -2828,6 +2834,7 @@ async function submitRefinement() {
         : `${result.total_seconds.toFixed(1)}s · ${result.tokens_per_second.toFixed(1)} tok/s · no media re-upload`,
     );
   } catch (error) {
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Refinement failed. Open Writer for details.");
     if (error.code === "INSUFFICIENT_FREE_VRAM") showVramRetry(error, submitRefinement);
     else showToast(error.code || "Refinement failed", error.message, error.details);
   } finally {
@@ -3261,6 +3268,18 @@ function createStudio() {
     clearEverything();
   });
   root.querySelector("[data-generate]").addEventListener("click", startGenerationPreview);
+  studio.desktopNotifications = createDesktopNotifications({ storage: localStorage, document, window });
+  const notificationsToggle = root.querySelector("[data-desktop-notifications]");
+  const syncNotifications = () => {
+    notificationsToggle.checked = studio.desktopNotifications.enabled;
+    root.querySelector("[data-desktop-notifications-hint]").textContent = studio.desktopNotifications.hint;
+  };
+  notificationsToggle.addEventListener("change", async () => {
+    notificationsToggle.disabled = true;
+    try { await studio.desktopNotifications.setEnabled(notificationsToggle.checked); }
+    finally { notificationsToggle.disabled = false; syncNotifications(); }
+  });
+  syncNotifications();
   root.querySelector("[data-restore-default-drafts]").addEventListener("click", restoreDefaultDrafts);
   root.querySelector("[data-comfy-memory-action]").addEventListener("click", () => releaseComfyVram());
   root.querySelector("[data-guide-toggle]").addEventListener("click", async () => {
@@ -3620,6 +3639,7 @@ function createStudio() {
     },
     refresh: () => { syncWorkspace(); renderMedia(studio.mode); },
     clearMedia: () => clearCurrentMedia(),
+    settled: (status) => studio.desktopNotifications.notify(status === "complete" ? "Sequence generation finished." : "Sequence needs attention. Open Writer for details."),
     error: (error) => showToast("Sequence", error.message, error.details || null, null, sequenceNotificationOptions(error)),
     copy: (text) => copyPromptText(text),
     insert: (editor, reference) => insertReferenceAtCaret(editor, reference, editor.selectionStart),
