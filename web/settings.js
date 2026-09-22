@@ -64,6 +64,7 @@ export function settingsMarkup(icon) {
             </div>
             <p class="h3ps-installed-model-source" data-model-source-label>Local GGUF · llama-cpp-python</p>
             <div data-direct-model-status></div>
+            <div data-direct-projector></div>
             <div class="h3ps-model-utilities">
               <div data-model-scan-slot></div>
               <div data-verified-models-slot></div>
@@ -86,7 +87,7 @@ export function settingsMarkup(icon) {
         </section>
 
         <section class="h3ps-settings-card h3ps-runtime-settings">
-          <header><span><small>Runtime</small><strong>Context</strong></span></header>
+          <header><span><small>Runtime</small></span></header>
           <div class="h3ps-runtime-settings-grid">
             <div class="h3ps-runtime-control"><span>Context</span><span class="h3ps-runtime-picker"><button type="button" aria-haspopup="true" aria-expanded="false" data-runtime-toggle="context"><b data-runtime-label="context">Auto</b>${icon("chevron", 12)}</button><span class="h3ps-runtime-menu" data-runtime-menu="context" hidden><button type="button" data-runtime-option="context" data-value="auto">Auto</button><button type="button" data-runtime-option="context" data-value="low">8K</button><button type="button" data-runtime-option="context" data-value="standard">16K</button><button type="button" data-runtime-option="context" data-value="extended">24K</button><button type="button" data-runtime-option="context" data-value="large">32K</button><button type="button" data-runtime-option="context" data-value="maximum">48K</button><button type="button" data-runtime-option="context" data-value="custom">Custom</button></span></span><label class="h3ps-runtime-custom" data-custom-context hidden><input type="number" min="1024" step="1" inputmode="numeric" placeholder="Enter tokens" data-custom-context-input><span>tokens</span></label></div>
           </div>

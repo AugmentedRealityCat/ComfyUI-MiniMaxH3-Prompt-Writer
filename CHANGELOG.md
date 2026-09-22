@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added Save/Load text drafts for Single and Sequence, plus audio extraction from video selections.
+- Added an Ollama generation budget and a manual Direct GGUF projector selector.
+- Removed the video Creative Brief character limit and improved long-text editing.
+- Fixed Single Reference numbering after deleting or reordering media.
+
 ## 0.4.6 - 2026-09-09
 
 - Added **Sequence mode**: turn one brief into a series of timed clips with consistent action and references. Each clip gets its own complete prompt and can be edited separately.

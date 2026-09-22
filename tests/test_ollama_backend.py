@@ -360,6 +360,24 @@ class OllamaBackendTests(unittest.TestCase):
             "images": ["AAAA", "BBBB"],
         }])
 
+    def test_manual_budget_reaches_context_plan_and_ollama_request(self):
+        model = self._model()
+        plan = self.backend.preflight(model, self._assembled(), context_profile="auto",
+                                      kv_cache="auto", thinking=False, generation_budget=3000)
+        self.assertEqual(plan["max_output_tokens"], 3000)
+        self.assertTrue(plan["generation_budget_manual"])
+        self.backend.prepare_request()
+        self.backend._chat_completion(model["remote_model"], plan, endpoint=self.url,
+                                      messages=[{"role": "user", "content": "Hello"}],
+                                      max_tokens=plan["max_output_tokens"], thinking=False, seed=1, temperature=.7, top_p=.9, top_k=40)
+        request = next(body for method, path, body in reversed(_FakeOllamaHandler.requests) if path == "/api/chat")
+        self.assertEqual(request["options"]["num_predict"], 3000)
+        for budget in (0, -1, True, "3000"):
+            with self.subTest(budget=budget), self.assertRaises(ModelError) as error:
+                self.backend.preflight(model, self._assembled(), context_profile="auto",
+                                       kv_cache="auto", thinking=False, generation_budget=budget)
+            self.assertEqual(error.exception.code, "INVALID_GENERATION_BUDGET")
+
     def test_auto_context_is_explicit_and_capped_by_model_limit(self):
         plan = self.backend.preflight(
             self._model(), self._assembled(),

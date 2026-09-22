@@ -1,3 +1,5 @@
+import "./reference_labels.mjs";
+import "./draft_files.mjs";
 import "./desktop_notifications.mjs";
 import { generationButtonMarkup } from "../web/writer_controls.js";
 import { aspectRatioMarkup, splitMenuMarkup } from "../web/writer_controls.js";
@@ -555,6 +557,8 @@ test("user preferences persist only stable non-secret settings", () => {
     direct_kv_cache: "q8",
     direct_generation_budget: "custom",
     direct_generation_budget_tokens: 6000,
+    ollama_generation_budget: "auto",
+    ollama_generation_budget_tokens: null,
     direct_reasoning_effort: "medium",
     music_lyrics_use_brief: false,
     fullscreen: true,
@@ -594,6 +598,8 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
     direct_kv_cache: "auto",
     direct_generation_budget: "auto",
     direct_generation_budget_tokens: null,
+    ollama_generation_budget: "auto",
+    ollama_generation_budget_tokens: null,
     direct_reasoning_effort: "auto",
     music_lyrics_use_brief: true,
     fullscreen: false,
@@ -785,14 +791,14 @@ test("custom contact sheet counts accept only whole values from 2 through 24", (
   }
 });
 
-test("video drafts preserve the 8000 character brief while Music keeps 2000", () => {
+test("long video drafts remain intact while Music keeps 2000", () => {
   const storage = memoryStorage();
   saveModeDrafts(storage, {
-    T2VA: { brief: "v".repeat(8000), prompt: "Video prompt" },
+    T2VA: { brief: "v".repeat(40000), prompt: "Video prompt" },
     Music3: { brief: "m".repeat(8000), prompt: "Music prompt", lyrics: "Lyrics" },
   });
   const drafts = loadModeDrafts(storage);
-  assert.equal(drafts.T2VA.brief.length, 8000);
+  assert.equal(drafts.T2VA.brief.length, 40000);
   assert.equal(drafts.Music3.brief.length, 2000);
 });
 
@@ -1249,7 +1255,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.doesNotMatch(mainSource, /data-developer-mode/);
   assert.doesNotMatch(markup, /Prompt models/);
   assert.doesNotMatch(markup, /data-model-menu/);
-  assert.match(markup, /<strong>Context<\/strong>/);
+  assert.doesNotMatch(markup, /<strong>Context<\/strong>/);
   assert.match(mainSource, /llama-cpp-python is not installed/);
   assert.match(mainSource, /data-copy-direct-runtime-command/);
   assert.match(mainSource, /Close ComfyUI, run this from your ComfyUI Portable folder/);
@@ -1264,7 +1270,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(mainSource, /Troubleshooting ↗/);
   assert.match(mainSource, /refreshGGUFRuntimeDiagnostics\(\)/);
   assert.match(markup, /h3ps-model-icon h3ps-provider-icon[^>]+data-provider-icon="direct"/);
-  assert.match(mainSource, /runtimeSettings\.hidden = provider !== "direct"/);
+  assert.match(mainSource, /runtimeSettings\.hidden = !\["direct", "ollama"\]\.includes\(provider\)/);
   assert.doesNotMatch(mainSource, /Context is sent explicitly with each request/);
   assert.match(mainSource, /studio\.selectedModel\?\.family === "gguf"/);
   assert.doesNotMatch(mainSource, /\/api\/pull/);
@@ -1655,7 +1661,7 @@ test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,420}requestAnimationFrame\(\(\) => \{[\s\S]{0,120}updateBriefLayout\(\)/);
   assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]:not\(\[hidden\]\)"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
-  assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
+  assert.match(mainSource, /fitTextarea\(brief, minimumHeight, 2\)/);
   assert.match(stylesSource, /\.h3ps-root\.is-fullscreen \.h3ps-brief textarea \{ max-height: none; \}/);
 });
 

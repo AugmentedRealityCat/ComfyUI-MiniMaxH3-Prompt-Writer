@@ -2,9 +2,9 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.7**
+Current Standalone version: **0.1.8**
 
-[Download H3 Prompt Writer Standalone v0.1.7](../../../releases/download/standalone-v0.1.7/H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip)
+[Download H3 Prompt Writer Standalone v0.1.8](../../../releases/download/standalone-v0.1.8/H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip)
 
 ## This is the Standalone version
 
@@ -69,10 +69,14 @@ H3_PROJECTOR="/path/to/mmproj.gguf" \
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.7
+## What's new in v0.1.8
 
-- Fixed video trimming and cropping failing because NumPy was missing.
-- Existing Windows environments now install missing dependencies on launch.
+- Save and load text drafts for Single and Sequence from Actions.
+- Extract and download audio from a selected video interval.
+- Set a manual generation budget for Ollama.
+- Keep Single Reference labels in sync after deleting or reordering media.
+- Write longer Creative Briefs without a character limit or scroll jumps.
+- Enable desktop notifications when generation finishes.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -175,6 +179,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

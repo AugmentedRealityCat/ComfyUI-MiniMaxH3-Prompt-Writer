@@ -47,6 +47,7 @@ function fixture(t, options={}){
     replaceChildren(){this.children=[];}
     setPointerCapture(){}
     getBoundingClientRect(){return {left:0,top:0,width:1000,height:58};}
+    click(){if(this.tagName==='A')downloads.push({name:this.download,url:this.href});}
     focus(){document.activeElement=this;}
     pause(){this.paused=true;}
     load(){}
@@ -62,12 +63,14 @@ function fixture(t, options={}){
   const asset={id:'v',type:'video',mode:'Reference',filename:'clip.mp4',width:544,height:960,duration:8,
     source:{width:544,height:960,duration:8},source_url:'source',contact_sheet_url:'applied-0',frames:Array(6),frame_count_mode:'auto'};
   Object.assign(asset, options.asset);
-  const calls=[],saved=[],errors=[],opened=[],pictures=[];
+  const calls=[],saved=[],errors=[],opened=[],pictures=[],audio=[],downloads=[];
   const editor=createMediaEditor({root,icon:name=>`<svg data-icon="${name}"></svg>`,notify:m=>errors.push(m),onOpenChange:v=>opened.push(v),onSaved:r=>saved.push(r),
     onAddFrame:async(blob,name)=>pictures.push({blob,name}),
+    onAddAudio:async(blob,name)=>audio.push({blob,name}),
     request:async(id,body)=>{
       calls.push(body);
       if(options.wait)await options.wait;
+      if(body.action==='audio')return new Blob(['audio'],{type:'audio/wav'});
       if(body.action==='frame')return {image:'data:image/png;base64,aGVsbG8='};
       if(body.action==='save')return {assets:[{...asset,content_revision:1,edit:{...body,crop:{...body.crop}},contact_sheet_url:'applied-1'}]};
       throw new Error('Unexpected request');
@@ -75,7 +78,7 @@ function fixture(t, options={}){
   const $=s=>root.el.querySelector(s);
   editor.open(asset);
   $('[data-ed-video]').onloadeddata();
-  return {editor,$,calls,saved,errors,opened,root,pictures};
+  return {editor,$,calls,saved,errors,opened,root,pictures,audio,downloads};
 }
 
 test('playback control follows native play, pause and ended events',t=>{
@@ -184,4 +187,28 @@ test('long staged Apply and realtime timeline feedback remain independent of Ref
   track.onpointerup();
   await f.$('[data-ed-save]').onclick();
   assert.equal(f.calls[1].start,6);assert.equal(f.calls[1].end,30);
+});
+
+
+test('audio extraction explains invalid selection, downloads and adds a trimmed reference without applying the video',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=fixture(t,{asset:{duration:30,source:{width:544,height:960,duration:30,has_audio:true}}});
+  const button=f.$('[data-ed-audio]');
+  assert.equal(button.hidden,false);
+  assert.equal(button.disabled,false);
+  await button.onclick();
+  assert.deepEqual(f.errors,['Select 2-15 seconds on the timeline to extract an audio reference.']);
+  assert.equal(f.calls.length,0);
+  f.$('[data-ed-video]').currentTime=8;
+  f.$('[data-ed-out]').onclick();
+  await button.onclick();
+  assert.equal(f.calls.length,1);
+  assert.equal(f.calls[0].action,'audio');
+  assert.equal(f.calls[0].start,0);
+  assert.equal(f.calls[0].end,8);
+  assert.equal(f.audio[0].name,'clip-audio.wav');
+  assert.equal(f.downloads[0].name,'clip-audio.wav');
+  assert.equal(await (await fetch(f.downloads[0].url)).text(),'audio');
+  t.mock.timers.tick(60000);
+  assert.equal(f.saved.length,0);
 });

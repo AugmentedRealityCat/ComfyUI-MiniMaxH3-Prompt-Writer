@@ -46,7 +46,7 @@
 }
 .h3ps-music-inputs { padding-top: calc(1px * var(--h3ps-interface-scale)); }
 .h3ps-music-inputs .h3ps-brief:first-of-type { margin-top: 20px; }
-.h3ps-music-inputs .h3ps-brief textarea { min-height: 150px; max-height: 240px; }
+.h3ps-music-inputs .h3ps-brief textarea { min-height: 150px; }
 .h3ps-music-inputs .h3ps-lyrics { margin-top: 20px; }
 .h3ps-music-inputs .h3ps-lyrics textarea { min-height: 190px; max-height: 330px; }
 .h3ps-lyrics-refine { margin-top: 8px; }

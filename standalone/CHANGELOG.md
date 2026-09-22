@@ -1,5 +1,14 @@
 # Standalone changelog
 
+## 0.1.8 - 2026-09-22
+
+- Save and load text drafts for Single and Sequence from Actions.
+- Extract and download audio from a selected video interval.
+- Set a manual generation budget for Ollama.
+- Keep Single Reference labels in sync after deleting or reordering media.
+- Write longer Creative Briefs without a character limit or scroll jumps.
+- Enable desktop notifications when generation finishes.
+
 ## 0.1.7 - 2026-09-11
 
 - Fixed video trimming and cropping failing because NumPy was missing.

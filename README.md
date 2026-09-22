@@ -10,7 +10,7 @@ It is a ComfyUI UI extension, not a workflow node. It writes prompt text for you
 
 ComfyUI extension: **0.4.6** · [Download ZIP](../../releases/download/v0.4.6/H3-Prompt-Writer-ComfyUI-v0.4.6.zip) · [Installation](docs/INSTALLATION.md)
 
-Standalone for Windows: **0.1.7** · [Download ZIP](../../releases/download/standalone-v0.1.7/H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip) · [Setup guide](standalone/README.md)
+Standalone for Windows: **0.1.8** · [Download ZIP](../../releases/download/standalone-v0.1.8/H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip) · [Setup guide](standalone/README.md)
 
 ## Highlights
 

@@ -152,16 +152,25 @@ class AssemblyReferenceManifestTests(unittest.TestCase):
             assembled = assemble_request(self.body("Use Picture 1, video 2, second video, второе видео, <picture 2>, and < Video 3 > as ideas."))
         self.assertEqual(assembled["media_inputs"], [])
 
-    def test_video_creative_brief_accepts_8000_characters_without_truncation(self):
-        brief = "Ж" * 8000
+    def test_missing_media_markers_fail_before_generate_or_refine(self):
         with patch("backend.assembly.STORE.manifest", return_value=self.manifest()):
-            assembled = assemble_request(self.body(brief))
-        self.assertEqual(assembled["input"]["creative_brief"], brief)
+            with self.assertRaises(AssemblyError) as error:
+                assemble_request(self.body("Use <Missing Picture 1>."))
+            self.assertEqual(error.exception.code, "REFERENCE_NOT_FOUND")
+            for field in ("creative_brief", "current_prompt", "instruction"):
+                request = {**self.body("A quiet room."), "current_prompt": "Current prompt", "instruction": "Keep the setting."}
+                request[field] = "Use <Missing Picture 1>."
+                with self.subTest(field=field), self.assertRaises(AssemblyError) as error:
+                    assemble_refinement(request, None)
+                self.assertEqual(error.exception.code, "REFERENCE_NOT_FOUND")
 
+    def test_long_video_creative_brief_survives_generate_and_refine(self):
+        brief = ("A character walks through a quiet room. " * 1000).strip()
         with patch("backend.assembly.STORE.manifest", return_value=self.manifest()):
-            with self.assertRaises(AssemblyError) as raised:
-                assemble_request(self.body(brief + "x"))
-        self.assertEqual(raised.exception.code, "BRIEF_TOO_LONG")
+            generated = assemble_request(self.body(brief))
+            refined = assemble_refinement({**self.body(brief), "current_prompt": "Current prompt", "instruction": "Keep the setting."}, None)
+        self.assertEqual(generated["input"]["creative_brief"], brief)
+        self.assertEqual(refined["input"]["creative_brief"], brief)
 
     def test_all_manifest_assets_are_active_but_audio_bytes_are_not_attached(self):
         picture = {"id": "p", "type": "image", "filename": "p.png", "reference": "<Picture 1>", "content_url": "/p", "frames": [], "prepared_width": 1536, "prepared_height": 768}

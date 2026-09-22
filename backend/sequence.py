@@ -28,8 +28,8 @@ def validate_sequence(body: dict) -> dict:
     for name in ("brief", "instructions"):
         if not isinstance(state.get(name), str) or not state[name].strip():
             invalid(f"Sequence {name} is required.")
-    if len(state["brief"]) > 8000 or len(state["instructions"]) > 32000:
-        invalid("The Creative Brief or Sequence Instructions are too long.")
+    if len(state["instructions"]) > 32000:
+        invalid("Sequence Instructions are too long.")
     if state.get("aspectRatio") not in ASPECT_RATIOS:
         invalid("Select a supported aspect ratio.")
     chunks = state.get("chunks")

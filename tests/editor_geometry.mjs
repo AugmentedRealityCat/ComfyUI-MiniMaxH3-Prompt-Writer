@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {fitTextarea} from '../web/writer_controls.js';
 import {cropRect,resizeCrop,trimRange} from '../web/media_editor.js';
 
 test('editor crop remains source-bound at all handles, ratios and snap settings',()=>{
@@ -32,4 +33,24 @@ test('editor uses explicit Apply, local draft controls and independent cropped f
   assert.match(js,/data-ed-discard/);
   assert.match(js,/format:'png'/);
   assert.match(js,/if\(add\)await onAddFrame\(blob,name\)/);
+});
+
+
+test('textarea autosizing preserves ancestor scroll offsets after temporary layout collapse',()=>{
+  const workspace={scrollTop:640,parentElement:null};
+  const panel={scrollTop:1200,parentElement:workspace};
+  const editor={parentElement:panel,style:{height:'2000px'},get scrollHeight(){
+    assert.equal(this.style.height,'auto');
+    // A layout read clamps both desktop panel and narrow-layout workspace scrolling.
+    panel.scrollTop=0;workspace.scrollTop=0;
+    return 2020;
+  }};
+  fitTextarea(editor,105,2);
+  assert.equal(editor.style.height,'2022px');
+  assert.equal(panel.scrollTop,1200);
+  assert.equal(workspace.scrollTop,640);
+  fitTextarea(editor,2100);
+  assert.equal(editor.style.height,'2100px');
+  assert.equal(panel.scrollTop,1200);
+  assert.equal(workspace.scrollTop,640);
 });

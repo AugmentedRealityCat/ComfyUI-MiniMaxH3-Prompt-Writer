@@ -287,7 +287,7 @@ class GGUFBackend:
         text_only: bool = False,
     ) -> None:
         runtime_kind = "text" if text_only else "multimodal"
-        signature = (model_info["id"], runtime_plan["context_tokens"], runtime_plan["kv_cache"], runtime_kind)
+        signature = (model_info["id"], runtime_plan["context_tokens"], runtime_plan["kv_cache"], runtime_kind, model_info.get("projector") if not text_only else None)
         if self.model is not None and self.runtime_signature == signature:
             return
         if not model_info.get("runtime_ready", True):

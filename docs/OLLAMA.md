@@ -60,3 +60,7 @@ With **Keep model loaded** off, Writer asks Ollama to unload the model after the
 Ollama is a shared service. Writer only offers unload controls for models it intentionally used and retained during the current Writer session. Retained-model state is tracked separately for each configured host.
 
 See [Troubleshooting](TROUBLESHOOTING.md#ollama-is-not-running) if the service or model is not detected.
+
+**Generation budget** in Settings sets the output token limit, including thinking.
+Auto keeps the default budget. Choose a preset or Custom when a response reaches
+its limit. Context is planned automatically and must also fit the selected model.

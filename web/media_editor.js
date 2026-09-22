@@ -52,7 +52,7 @@ function markup(icon) {
             <div class="h3ps-ed-crop-summary"><output data-ed-dimensions></output><span class="h3ps-ed-utilities"><label class="h3ps-ed-check"><input type="checkbox" data-ed-snap>Snap ×32</label><label class="h3ps-ed-check" data-ed-loop-control><input type="checkbox" data-ed-loop>Loop</label></span></div>
           </section>
           <section class="h3ps-ed-timeline" data-ed-temporal>
-            <div class="h3ps-ed-playback"><button type="button" class="h3ps-icon-button" data-ed-play aria-label="Play or pause">${icon('play',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="-1" title="Previous frame" aria-label="Previous frame">${icon('chevron',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="1" title="Next frame" aria-label="Next frame">${icon('chevron',20)}</button><output data-ed-time>00:00.0 / 00:00.0</output><button type="button" class="h3ps-icon-button" data-ed-frame-download title="Download current frame with draft crop" aria-label="Download current frame">${icon('download',20)}</button><button type="button" class="h3ps-icon-button" data-ed-frame-add title="Add current frame with draft crop as Picture" aria-label="Add current frame as Picture">${icon('image',20)}${icon('plus',12)}</button><button class="h3ps-cmp-text-action" type="button" data-ed-in>Set Start</button><button class="h3ps-cmp-text-action" type="button" data-ed-out>Set End</button></div>
+            <div class="h3ps-ed-playback"><button type="button" class="h3ps-icon-button" data-ed-play aria-label="Play or pause">${icon('play',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="-1" title="Previous frame" aria-label="Previous frame">${icon('chevron',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="1" title="Next frame" aria-label="Next frame">${icon('chevron',20)}</button><output data-ed-time>00:00.0 / 00:00.0</output><button type="button" class="h3ps-icon-button" data-ed-frame-download title="Download current frame with draft crop" aria-label="Download current frame">${icon('download',20)}</button><button type="button" class="h3ps-icon-button" data-ed-frame-add title="Add current frame with draft crop as Picture" aria-label="Add current frame as Picture">${icon('image',20)}${icon('plus',12)}</button><button type="button" class="h3ps-icon-button" data-ed-audio hidden title="Download audio and add to workspace (2-15 seconds). Writer does not analyze sound. Connect the WAV separately in H3 and describe its role in the Brief." aria-label="Download audio and add to workspace">${icon('audio',20)}</button><button class="h3ps-cmp-text-action" type="button" data-ed-in>Set Start</button><button class="h3ps-cmp-text-action" type="button" data-ed-out>Set End</button></div>
             <div class="h3ps-ed-track" data-ed-track tabindex="0" role="slider" aria-label="Source playhead" aria-valuemin="0">
               <div class="h3ps-ed-filmstrip" data-ed-filmstrip aria-hidden="true"></div><span class="h3ps-ed-dim" data-ed-dim-left></span><span class="h3ps-ed-dim" data-ed-dim-right></span><div class="h3ps-ed-trim" data-ed-trim></div><i class="h3ps-ed-playhead" data-ed-playhead></i><button type="button" data-ed-bound="start" aria-label="Drag trim start"></button><button type="button" data-ed-bound="end" aria-label="Drag trim end"></button></div>
 
@@ -77,7 +77,7 @@ function markup(icon) {
   </section>`;
 }
 
-export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,onOpenChange}) {
+export function createMediaEditor({root,icon,request,onSaved,onAddFrame,onAddAudio,notify,onOpenChange}) {
   const wrapper=document.createElement('div');wrapper.innerHTML=markup(icon);
   const el=wrapper.firstElementChild;root.append(el);
   const $=s=>el.querySelector(s),$$=s=>[...el.querySelectorAll(s)];
@@ -141,6 +141,8 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     $('[data-ed-view-subtitle]').textContent=asset.status==='needs_edit'?'Not a Reference':'Applied media';
     $('[data-ed-save]').disabled=busy||loading||!mediaReady||!dirty();
     $('[data-ed-download]').disabled=busy||loading||!mediaReady;
+    $('[data-ed-audio]').hidden=!isVideo() || !source.has_audio;
+    $('[data-ed-audio]').disabled=busy||loading||!mediaReady;
     $('[data-ed-status]').textContent=busy?'Processing media…':loading?'Loading source…':invalid?'H3 Reference requires 2–15 s. Edits can still be applied.':dirty()?'Unapplied changes':'Edits saved';
     $$('[data-ed-count]').forEach(b=>{const active=!customMode&&b.dataset.edCount===edit.frame_count_mode;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',String(active));});
     $('[data-ed-custom-row]').hidden=!customMode;
@@ -215,6 +217,9 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
   }
   async function run(action){
     if(busy||loading||!mediaReady||!asset)return;
+    if(action==='audio'&&(edit.end-edit.start<2||edit.end-edit.start>15)){
+      notify('Select 2-15 seconds on the timeline to extract an audio reference.');return;
+    }
     if(action==='save'){readSampling();if($('[data-ed-save]').disabled)return;}
     stop();saving=action==='save';setBusy(true);
     try{
@@ -225,10 +230,15 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
         asset=updated;
         edit={...edit,...asset.edit,crop:{...(asset.edit?.crop||edit.crop)}};
         applied=JSON.stringify(edit);appliedView();timelineView();await onSaved(result);
-      }else download(result,(asset.filename.replace(/\.[^.]+$/,'')||'media')+'-edited'+(isVideo()?'.mp4':'.png'));
+      }else if(action==='audio'){
+        const name=(asset.filename.replace(/\.[^.]+$/,'')||'video')+'-audio.wav';
+        download(result,name);await onAddAudio(result,name);
+      }
+      else download(result,(asset.filename.replace(/\.[^.]+$/,'')||'media')+'-edited'+(isVideo()?'.mp4':'.png'));
     }catch(error){notify(error.message);}finally{saving=false;setBusy(false);}
   }
   $$('[data-ed-close]').forEach(b=>b.addEventListener('click',()=>close()));
+  $('[data-ed-audio]').onclick=()=>run('audio');
   $('[data-ed-reset]').onclick=reset;$('[data-ed-download]').onclick=()=>run('download');$('[data-ed-save]').onclick=()=>run('save');
   $$('[data-ed-ratio]').forEach(b=>b.onclick=()=>setRatio(b.dataset.edRatio));
   $('[data-ed-frame-download]').onclick=()=>currentFrame(false);$('[data-ed-frame-add]').onclick=()=>currentFrame(true);

@@ -574,3 +574,14 @@ test("native highlight ranges keep one mirror text run and release obsolete rang
   assert.equal(w.CSS.highlights.size,0);assert.equal(a.textContent,'');
   await w.happyDOM.close();
 });
+
+
+test("long Sequence brief has an informational count and survives storage",async()=>{
+  const {window,root,input}=await sequenceFixture();
+  const brief="A quiet scene. ".repeat(3000),editor=root.querySelector('[data-seq-brief]');
+  assert.equal(editor.hasAttribute('maxlength'),false);
+  input(editor,brief);
+  assert.equal(root.querySelector('[data-seq-brief-count]').textContent,`${brief.length.toLocaleString()} characters`);
+  assert.equal(loadSequence(window.localStorage).brief,brief);
+  await window.happyDOM.close();
+});

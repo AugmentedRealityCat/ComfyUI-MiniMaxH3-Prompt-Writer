@@ -1,18 +1,22 @@
-# H3 Prompt Writer Standalone v0.1.7
+# H3 Prompt Writer Standalone v0.1.8
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip** from the release assets below.
+Download **H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- Fixed video trimming and cropping failing because NumPy was missing.
-- Existing Windows environments now install missing dependencies on launch.
+- Save and load text drafts for Single and Sequence from Actions.
+- Extract and download audio from a selected video interval.
+- Set a manual generation budget for Ollama.
+- Keep Single Reference labels in sync after deleting or reordering media.
+- Write longer Creative Briefs without a character limit or scroll jumps.
+- Enable desktop notifications when generation finishes.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.
@@ -26,7 +30,7 @@ shown in Standalone.
 - Vision GGUF projectors with metadata-based matching
 - Combined and removable model locations
 - Local GGUF Context, KV cache, Generation budget, and supported reasoning effort controls
-- Video Creative Briefs up to 8,000 characters
+- Single and Sequence Creative Briefs without a character limit; model context limits still apply
 
 External llama.cpp keeps its own reasoning and chat-template settings. Writer separates returned reasoning from the final H3 prompt without overriding the server.
 

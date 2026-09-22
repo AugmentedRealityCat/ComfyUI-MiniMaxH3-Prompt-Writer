@@ -25,6 +25,11 @@ def body(state=None, **values):
 
 
 class SequenceAssemblyTests(unittest.TestCase):
+    def test_long_brief_survives_sequence_validation(self):
+        state = draft()
+        state["brief"] = "Keep the same scene throughout. " * 1000
+        self.assertEqual(validate_sequence(body(state))["brief"], state["brief"])
+
     def test_only_whole_response_fence_is_removed_without_rewriting_prompt(self):
         prompt="integrated_multimodal_description: [Shot 1] Literal {text}.\n\noverall_soundscape: Room.\n\nnon_diegetic_music: N/A"
         for wrapper in ["```text\n{}\n```", "```\n{}\n```"]:

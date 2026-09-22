@@ -31,6 +31,12 @@ The sun/moon button switches between Dark and Light. The **Aa** button adjusts *
 
 Duration and aspect ratio become part of the request. The generated text remains editable before you copy it.
 
+### Save and load text drafts
+
+Use **Actions > Save text draft** or **Load text draft** to save or open a JSON file for Single H3 or Sequence. Drafts include the brief, prompts, writing instructions, duration and aspect ratio. Sequence also keeps chunk directions, output format and copy formatting. File names include the draft type and local date and time.
+
+Media files, model settings and credentials are not included. Loading replaces the target draft and clears its current media. Reattach the original files and check their labels before generating. File names and Sequence assignments are listed in Technical details as a reminder. This is a text backup, not a complete project archive.
+
 ## Sequence
 
 Choose **Sequence** to write several H3 prompts from one Creative Brief. Add chunks and set their durations, from 1 to 15 seconds each. **New chunk duration** applies to the next added chunk. On first use, a short example fills Creative Brief while chunk prompts stay empty. Edit or clear it; saved edits and empty briefs stay as you left them. The sequence keeps its own draft. It does not join videos, connect a workflow, or assume how you will use the chunks.
@@ -109,7 +115,7 @@ Music 3 keeps its own saved Music Brief, Lyrics, and edited caption. Open **Syst
 
 Write what should happen in ordinary language. You do not need to reproduce the official H3 prompt format. Writer builds that structure for you.
 
-Video Creative Briefs can contain up to 8,000 characters. Music Briefs keep their separate 2,000-character limit.
+Single and Sequence Creative Briefs have no character limit. The full request must still fit the model context, including guides, media, and room for the answer. Music Briefs keep their separate 2,000-character limit.
 
 A useful brief usually says:
 
@@ -163,6 +169,8 @@ Images are sent to the selected multimodal model in reference order. Reordering 
 
 In Reference mode, select **Replace** on an asset card or drop one new file on the card. The new file keeps the same position in the list. It can be a different media type, so check any Picture, Video, or Audio tags in your brief after replacing it. Dropping several files on a card adds them to the end of the list instead.
 
+Single Reference labels follow the current order of ready media within each type. Deleting or reordering media updates the labels and matching tags in the Single Brief, prompt, and Refine text. Same-type replacement keeps its slot. References to removed or unavailable media become tags such as `<Missing Picture 1>`; replace or remove them before Generate or Refine. Sequence keeps its separate chunk-local labels.
+
 For video, Writer prepares an ordered contact sheet. Open a video card to inspect **What the model sees** and choose the available frame-sampling options. The contact sheet still represents the same `<Video N>` reference; it does not create extra `<Picture N>` tags.
 
 Local providers and remote API providers use the prepared contact sheet instead of the original encoded video stream. API providers can receive the derived sheet, but not the original video bytes.
@@ -170,6 +178,8 @@ Local providers and remote API providers use the prepared contact sheet instead 
 ## Media Editor
 
 Open a picture or video card to edit it. Crop pictures, trim or crop video, and inspect the applied result in **What the model sees**. For video, you can also download the current frame or add it as a new Picture.
+
+For a video with audio, select 2-15 seconds and use the **Extract audio** icon next to **Add current frame as Picture**. Writer downloads a WAV file and adds it as an Audio reference, keeping the video unchanged. This uses the current trim selection without requiring Apply. Connect the WAV separately in H3. Writer does not analyze its sound; describe its intended role in the Brief.
 
 Edits stay in the editor until you select **Apply**. **Reset edits** returns the draft to the original media; Apply saves that reset. Closing with unapplied changes lets you keep editing or discard the draft. The original file is preserved.
 
