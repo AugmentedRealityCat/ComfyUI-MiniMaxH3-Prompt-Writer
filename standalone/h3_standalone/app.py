@@ -224,6 +224,7 @@ def create_app(settings: Settings) -> web.Application:
     app.router.add_get("/", index)
     app.router.add_get("/healthz", health)
     app.router.add_get("/manifest.json", manifest)
+    app.router.add_static("/app-icons/", PACKAGE_ROOT / "ui" / "icons")
     app.router.add_get("/standalone/gguf/state", managed_state)
     app.router.add_post("/standalone/gguf/config", managed_config)
     app.router.add_post("/standalone/gguf/roots/add", add_model_root)

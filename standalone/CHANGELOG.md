@@ -1,5 +1,9 @@
 # Standalone changelog
 
+## 0.1.9 - 2026-09-23
+
+- Open Writer as an installed browser app with its own window and taskbar icon. Thanks to @kaalibro (#35).
+
 ## 0.1.8 - 2026-09-22
 
 - Save and load text drafts for Single and Sequence from Actions.

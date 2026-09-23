@@ -2,9 +2,9 @@
 
 Use H3 Prompt Writer without ComfyUI.
 
-Current Standalone version: **0.1.8**
+Current Standalone version: **0.1.9**
 
-[Download H3 Prompt Writer Standalone v0.1.8](../../../releases/download/standalone-v0.1.8/H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip)
+[Download H3 Prompt Writer Standalone v0.1.9](../../../releases/download/standalone-v0.1.9/H3-Prompt-Writer-Standalone-Windows-v0.1.9.zip)
 
 ## This is the Standalone version
 
@@ -41,6 +41,21 @@ over the same folder.
 The Writer opens directly in a full-window browser view. Close the browser tab or
 window normally.
 
+### Optional: install as a browser app
+
+This is optional. The normal way to use Writer is to run `start.bat` and work in
+the browser tab it opens; no browser app installation is required.
+
+In a Chromium-based browser that supports installing web apps, use the browser's
+install option to open Writer in its own window and pin it to the taskbar.
+This does not start the Python server: run `start.bat` first and keep its console
+open while using Writer.
+
+The installed app remembers the server address and port (normally
+`http://127.0.0.1:8765/`). If that port is occupied, Standalone opens on another port;
+the installed shortcut still points to the old address. Free the usual port and
+restart Standalone, or use the new browser URL printed in the console.
+
 ### Linux
 
 Standalone also runs on Linux using the same Python backend and browser-based interface.
@@ -69,14 +84,11 @@ H3_PROJECTOR="/path/to/mmproj.gguf" \
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.8
+## What's new in v0.1.9
 
-- Save and load text drafts for Single and Sequence from Actions.
-- Extract and download audio from a selected video interval.
-- Set a manual generation budget for Ollama.
-- Keep Single Reference labels in sync after deleting or reordering media.
-- Write longer Creative Briefs without a character limit or scroll jumps.
-- Enable desktop notifications when generation finishes.
+- Install Writer as a browser app in a supported Chromium-based browser, with its own window and taskbar icon. Thanks to @kaalibro (#35).
+
+Start Standalone with `start.bat` first; the installed app needs the local server running at the same address.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -179,6 +191,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.8.zip`. It records the
+The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.9.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
